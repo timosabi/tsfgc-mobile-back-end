@@ -1,0 +1,14 @@
+info:
+  name: 'Owner: remove member'
+  type: http
+  seq: 1700000021000
+http:
+  method: DELETE
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/members/{{targetUserId}}'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: owner member-management screen. Purpose: removes a member from the friends group. Requires current user to be group owner. Owner cannot remove themselves; use Leave group instead.'

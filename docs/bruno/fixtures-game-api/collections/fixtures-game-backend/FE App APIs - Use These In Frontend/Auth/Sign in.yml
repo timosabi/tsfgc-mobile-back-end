@@ -1,0 +1,24 @@
+info:
+  name: Sign in
+  type: http
+  seq: 1700000006000
+http:
+  method: POST
+  url: '{{baseUrl}}/auth/sign-in'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "email": "{{email}}",
+        "password": "{{password}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: login screen. Purpose: authenticates an existing user and sets Supabase auth cookies for protected APIs.'

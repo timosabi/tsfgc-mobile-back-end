@@ -1,0 +1,25 @@
+info:
+  name: Sign up
+  type: http
+  seq: 1700000005000
+http:
+  method: POST
+  url: '{{baseUrl}}/auth/sign-up'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "email": "{{email}}",
+        "password": "{{password}}",
+        "displayName": "{{displayName}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: sign-up screen. Purpose: creates Supabase auth user and backend profile row. Notes: response sets auth cookies; keep credentials enabled on FE requests.'

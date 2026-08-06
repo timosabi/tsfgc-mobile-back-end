@@ -1,0 +1,14 @@
+info:
+  name: Check slug
+  type: http
+  seq: 1700000011000
+http:
+  method: GET
+  url: '{{baseUrl}}/friends-groups/check-slug/{{friendsGroupSlug}}'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: create-group form validation. Purpose: checks whether the desired slug is available. Response: data.available boolean. Recommended FE behavior: debounce while typing after local lowercase kebab-case validation, and still handle POST /friends-groups 409 on submit because create remains the source of truth.'

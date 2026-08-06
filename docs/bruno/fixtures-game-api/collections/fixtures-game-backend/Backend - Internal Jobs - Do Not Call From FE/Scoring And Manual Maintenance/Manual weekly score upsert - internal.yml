@@ -1,0 +1,31 @@
+info:
+  name: Manual weekly score upsert - internal
+  type: http
+  seq: 1700000047000
+http:
+  method: POST
+  url: '{{baseUrl}}/weekly-score/upsert'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "weeklyScores": [
+          {
+            "user_id": "{{userId}}",
+            "friends_group_id": "{{friendsGroupId}}",
+            "week_number": 1,
+            "fixtures_predicted": 1,
+            "points_earned": 0
+          }
+        ]
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: emergency repair/local maintenance only. Purpose: manually inserts or updates score rows. Do not call from FE.'

@@ -1,0 +1,24 @@
+info:
+  name: Join by invite link
+  type: http
+  seq: 1700000015000
+http:
+  method: POST
+  url: '{{baseUrl}}/friends-groups/invite/{{inviteToken}}/join'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "message": "Let me in",
+        "userDisplayName": "{{displayName}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: invite landing page join button. Purpose: joins open groups immediately or creates a pending request for private groups. Notes: requires signed-in user.'

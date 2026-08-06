@@ -1,0 +1,14 @@
+info:
+  name: List competition catalog
+  type: http
+  seq: 1700000010000
+http:
+  method: GET
+  url: '{{baseUrl}}/friends-groups/competitions'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: create-friends-group league select. Purpose: lists real football competitions and current season metadata for display. Backend self-syncs missing current season data from SportMonks once, then returns DB rows. Notes: send provider_league_id as providerLeagueId when creating the group; backend resolves the current season.'

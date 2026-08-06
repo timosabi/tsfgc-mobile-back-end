@@ -1,0 +1,25 @@
+info:
+  name: Refresh live fixtures - internal SportMonks call
+  type: http
+  seq: 1700000037000
+http:
+  method: POST
+  url: '{{baseUrl}}/fixtures/live/refresh'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "providerLeagueIds": [
+          "{{providerLeagueId}}"
+        ]
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: live polling job/manual local test. Purpose: calls SportMonks/mock live endpoint and patches DB live fixture rows. Do not call from FE.'

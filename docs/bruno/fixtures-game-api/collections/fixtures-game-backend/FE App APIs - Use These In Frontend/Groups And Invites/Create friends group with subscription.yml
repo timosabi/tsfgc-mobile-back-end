@@ -1,0 +1,37 @@
+info:
+  name: Create friends group with subscription
+  type: http
+  seq: 1700000012000
+http:
+  method: POST
+  url: '{{baseUrl}}/friends-groups'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "payload": {
+          "name": "Local Test Group",
+          "slug": "{{friendsGroupSlug}}",
+          "accessType": "open",
+          "subscription": {
+            "providerLeagueId": "{{providerLeagueId}}"
+          }
+        }
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const body = res.body;
+        if (body.data && body.data.id) bru.setEnvVar("friendsGroupId", body.data.id);
+        if (body.data && body.data.invite_token) bru.setEnvVar("inviteToken", body.data.invite_token);
+docs: 'FE placement: submit button on create-friends-group screen. Purpose: creates an approved friends group immediately, activates the selected football subscription, adds creator as member, hydrates fixtures, and returns invite_token/joinLink. Notes: FE sends providerLeagueId only; backend resolves the current season from the catalog/SportMonks. User can own only one group; accessType must be open or private.'

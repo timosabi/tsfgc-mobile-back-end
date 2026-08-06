@@ -1,0 +1,14 @@
+info:
+  name: My groups
+  type: http
+  seq: 1700000013000
+http:
+  method: GET
+  url: '{{baseUrl}}/friends-groups/me/groups'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: dashboard and group switcher. Purpose: lists friends groups current user belongs to. Also returns friends_group.invite_token and friends_group.joinLink so the FE can rebuild share/invite UI after reload or cache clear. Group cards can render friends_group.currentMatchweek.displayLabel, e.g. Premier League week 12, or build it from friends_group.league.name plus friends_group.currentMatchweek.weekNumber. The top-level score object is the current user cumulative season/group score summary for that group, not a matchweek score.'

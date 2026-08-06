@@ -1,0 +1,21 @@
+info:
+  name: Specific matchweek overview
+  type: http
+  seq: 1700000023000
+http:
+  method: GET
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/matchweeks/{{matchweek}}/overview'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: >-
+  FE placement: user swipes to previous/next matchweek. Purpose: loads the same
+  complete overview snapshot for a selected matchweek. Important data meaning:
+  scores.rows contains compact selected-matchweek score rows only; there is no
+  scores.mine, so FE finds the current user's row by user_id. Season totals are
+  returned by the group APIs or leaderboard endpoint, not overview. Notes: before
+  lock it only returns the current user prediction; after lock/finished it reveals
+  submitted member predictions and readonly selected-matchweek score/history data.

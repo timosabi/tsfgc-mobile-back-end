@@ -1,0 +1,24 @@
+info:
+  name: Update profile
+  type: http
+  seq: 1700000033000
+http:
+  method: PUT
+  url: '{{baseUrl}}/profiles/id'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "display_name": "{{displayName}}",
+        "favorite_team": "Arsenal"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: account/settings save button. Purpose: updates display name/avatar/color/favorite team and active group preferences.'

@@ -1,0 +1,23 @@
+info:
+  name: 'Owner: transfer ownership'
+  type: http
+  seq: 1700000022000
+http:
+  method: POST
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/transfer-ownership'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "newOwnerUserId": "{{newOwnerUserId}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: owner member-management screen. Purpose: transfers ownership to an existing group member. The new owner must not already own another active friends group.'

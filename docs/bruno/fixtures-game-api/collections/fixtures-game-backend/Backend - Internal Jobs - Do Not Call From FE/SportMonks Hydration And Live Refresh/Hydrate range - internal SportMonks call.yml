@@ -1,0 +1,24 @@
+info:
+  name: Hydrate range - internal SportMonks call
+  type: http
+  seq: 1700000041000
+http:
+  method: POST
+  url: '{{baseUrl}}/admin/fixtures/hydrate/range'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "startDate": "2026-05-01",
+        "endDate": "2026-05-07"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: admin data repair. Purpose: hydrates fixtures for a date range. Do not call from FE.'

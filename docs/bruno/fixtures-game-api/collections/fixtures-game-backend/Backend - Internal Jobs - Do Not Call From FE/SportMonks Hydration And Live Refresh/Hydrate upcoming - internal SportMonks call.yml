@@ -1,0 +1,26 @@
+info:
+  name: Hydrate upcoming - internal SportMonks call
+  type: http
+  seq: 1700000039000
+http:
+  method: POST
+  url: '{{baseUrl}}/admin/fixtures/hydrate/upcoming'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "days": 30,
+        "providerLeagueIds": [
+          "{{providerLeagueId}}"
+        ]
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: scheduled upcoming-fixture refresh. Purpose: catches postponed/rescheduled/upcoming fixtures. Do not call from FE.'

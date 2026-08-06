@@ -1,0 +1,11 @@
+opencollection: 1.0.0
+info:
+  name: fixtures-game-api
+  type: workspace
+collections:
+  - name: fixtures-game-backend
+    path: collections/fixtures-game-backend
+specs:
+  - name: Fixtures Game Backend API
+    path: apispec/fixtures-game-api.openapi.yaml
+docs: Fixtures Game Backend Bruno workspace. Select the local environment before sending requests.

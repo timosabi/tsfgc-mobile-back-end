@@ -1,0 +1,3721 @@
+---
+openapi: 3.0.3
+info:
+  title: Fixtures Game Backend API
+  version: 1.0.0
+  description: API contract for the no-money football prediction game backend. Use
+    `FE - ...` tags for frontend work and `Internal - ...` tags for backend jobs/admin
+    maintenance.
+servers:
+- url: http://localhost:3001
+  description: Local backend
+tags:
+- name: FE - Auth
+- name: FE - Groups And Invites
+- name: FE - Health
+- name: FE - Leaderboard
+- name: FE - Matchweek Overview
+- name: FE - Prediction Slip
+- name: FE - Profile Settings
+- name: Internal - Scoring And Manual Maintenance
+- name: Internal - SportMonks Hydration And Live Refresh
+paths:
+  "/weekly-score/calculate-all":
+    post:
+      tags:
+      - Internal - Scoring And Manual Maintenance
+      summary: Calculate all finished scores - internal job
+      operationId: post_weekly_score_calculate_all
+      description: 'Internal placement: scoring cron/manual local test. Purpose: calculates
+        all active groups with finished fixtures. FE should only read resulting leaderboard/history
+        APIs.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/Scoring And Manual
+        Maintenance
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CalculateAllScoresResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/weekly-score/{friendsGroupId}/calculate":
+    post:
+      tags:
+      - Internal - Scoring And Manual Maintenance
+      summary: Calculate matchweek scores - internal job
+      operationId: post_weekly_score_friendsGroupId_calculate
+      description: 'Internal placement: scoring worker/manual local test after results
+        are finished. Purpose: calculates one group matchweek scores. FE should only
+        read resulting score/history APIs.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/Scoring And Manual
+        Maintenance
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CalculateScoresRequest"
+            example:
+              matchweek: "{{matchweek}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ScoreCalculationResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/match-event":
+    post:
+      tags:
+      - Internal - Scoring And Manual Maintenance
+      summary: Manual match event insert - internal
+      operationId: post_match_event
+      description: 'Internal placement: local maintenance event creation. Purpose:
+        inserts raw match event data. Do not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/Scoring And Manual
+        Maintenance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/MatchEventRequest"
+            example:
+              fixture_id: "{{fixtureId}}"
+              event_type: goal
+              minute: 10
+              player_name: Test Player
+              team: Home
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MatchEventResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/weekly-score/upsert":
+    post:
+      tags:
+      - Internal - Scoring And Manual Maintenance
+      summary: Manual weekly score upsert - internal
+      operationId: post_weekly_score_upsert
+      description: 'Internal placement: emergency repair/local maintenance only. Purpose:
+        manually inserts or updates score rows. Do not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/Scoring And Manual
+        Maintenance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/WeeklyScoreUpsertRequest"
+            example:
+              weeklyScores:
+              - user_id: "{{userId}}"
+                friends_group_id: "{{friendsGroupId}}"
+                week_number: 1
+                fixtures_predicted: 1
+                points_earned: 0
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/WeeklyScoreUpsertResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/admin/fixtures/hydrate/full":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Full hydration - internal SportMonks call
+      operationId: post_admin_fixtures_hydrate_full
+      description: 'Internal placement: manual full refresh/local smoke test. Purpose:
+        runs upcoming plus recent finished hydration. Do not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HydrateFullRequest"
+            example:
+              providerLeagueIds:
+              - "{{providerLeagueId}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HydrationJobResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/admin/fixtures/hydrate/finished":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Hydrate finished - internal SportMonks call
+      operationId: post_admin_fixtures_hydrate_finished
+      description: 'Internal placement: recent-results refresh job/local test. Purpose:
+        stores finished results/red-card outcomes; mock mode flips Matchweek 2. Do
+        not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HydrateFinishedRequest"
+            example:
+              days: 7
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HydrationJobResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/admin/fixtures/hydrate/league-season":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Hydrate league season - internal SportMonks call
+      operationId: post_admin_fixtures_hydrate_league_season
+      description: 'Internal placement: group creation/hydration repair job. Purpose:
+        fetches and stores fixture schedule for one league/season. Do not call from
+        FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HydrateLeagueSeasonRequest"
+            example:
+              providerLeagueId: "{{providerLeagueId}}"
+              providerSeasonId: "{{providerSeasonId}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HydrationJobResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/admin/fixtures/hydrate/matchweek":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Hydrate matchweek - internal SportMonks call
+      operationId: post_admin_fixtures_hydrate_matchweek
+      description: 'Internal placement: admin data repair. Purpose: hydrates one league
+        matchweek. Do not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HydrateMatchweekRequest"
+            example:
+              matchweek: "{{matchweek}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                - ok
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/admin/fixtures/hydrate/range":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Hydrate range - internal SportMonks call
+      operationId: post_admin_fixtures_hydrate_range
+      description: 'Internal placement: admin data repair. Purpose: hydrates fixtures
+        for a date range. Do not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HydrateRangeRequest"
+            example:
+              startDate: '2026-05-01'
+              endDate: '2026-05-07'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HydrationJobResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/admin/fixtures/hydrate/upcoming":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Hydrate upcoming - internal SportMonks call
+      operationId: post_admin_fixtures_hydrate_upcoming
+      description: 'Internal placement: scheduled upcoming-fixture refresh. Purpose:
+        catches postponed/rescheduled/upcoming fixtures. Do not call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HydrateUpcomingRequest"
+            example:
+              days: 30
+              providerLeagueIds:
+              - "{{providerLeagueId}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                - ok
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/fixtures/live/refresh":
+    post:
+      tags:
+      - Internal - SportMonks Hydration And Live Refresh
+      summary: Refresh live fixtures - internal SportMonks call
+      operationId: post_fixtures_live_refresh
+      description: 'Internal placement: live polling job/manual local test. Purpose:
+        calls SportMonks/mock live endpoint and patches DB live fixture rows. Do not
+        call from FE.'
+      x-fe-scope: backend-internal
+      x-bruno-folder: Backend - Internal Jobs - Do Not Call From FE/SportMonks Hydration
+        And Live Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/LiveRefreshRequest"
+            example:
+              providerLeagueIds:
+              - "{{providerLeagueId}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/LiveRefreshResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/auth/me":
+    get:
+      tags:
+      - FE - Auth
+      summary: Me
+      operationId: get_auth_me
+      description: 'FE placement: app bootstrap/session restore. Purpose: verifies
+        current cookie session and returns auth user id/email.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Auth
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AuthMeResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/auth/sign-in":
+    post:
+      tags:
+      - FE - Auth
+      summary: Sign in
+      operationId: post_auth_sign_in
+      description: 'FE placement: login screen. Purpose: authenticates an existing
+        user and sets Supabase auth cookies for protected APIs.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AuthSignInRequest"
+            example:
+              email: "{{email}}"
+              password: "{{password}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AuthSignInResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+  "/auth/sign-out":
+    post:
+      tags:
+      - FE - Auth
+      summary: Sign out
+      operationId: post_auth_sign_out
+      description: 'FE placement: account menu/logout action. Purpose: clears local
+        auth session cookies. Notes: returns 204 with no JSON body.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Auth
+      responses:
+        '204':
+          description: No content.
+  "/auth/sign-up":
+    post:
+      tags:
+      - FE - Auth
+      summary: Sign up
+      operationId: post_auth_sign_up
+      description: 'FE placement: sign-up screen. Purpose: creates Supabase auth user
+        and backend profile row. Notes: response sets auth cookies; keep credentials
+        enabled on FE requests.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AuthSignUpRequest"
+            example:
+              email: "{{email}}"
+              password: "{{password}}"
+              displayName: "{{displayName}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AuthSignUpResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+  "/friends-groups/check-slug/{friendsGroupSlug}":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: Check slug
+      operationId: get_friends_groups_check_slug_friendsGroupSlug
+      description: 'FE placement: create-group form validation. Purpose: checks whether
+        the desired slug is available. Debounce this while typing after local lowercase
+        kebab-case validation, and still handle POST /friends-groups 409 on submit
+        because create remains the source of truth.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupSlug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SlugCheckResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups":
+    post:
+      tags:
+      - FE - Groups And Invites
+      summary: Create friends group with subscription
+      operationId: post_friends_groups
+      description: 'FE placement: submit button on create-friends-group screen. Purpose:
+        creates an approved friends group immediately, activates the selected football
+        subscription, adds creator as member, hydrates fixtures, and returns invite_token/joinLink.
+        Notes: user can own only one group; accessType must be open or private.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateFriendsGroupRequest"
+            example:
+              payload:
+                name: Local Test Group
+                slug: "{{friendsGroupSlug}}"
+                accessType: open
+                subscription:
+                  providerLeagueId: "{{providerLeagueId}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreateFriendsGroupResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/invite/{inviteToken}/join":
+    post:
+      tags:
+      - FE - Groups And Invites
+      summary: Join by invite link
+      operationId: post_friends_groups_invite_inviteToken_join
+      description: 'FE placement: invite landing page join button. Purpose: joins
+        open groups immediately or creates a pending request for private groups. Notes:
+        requires signed-in user.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: inviteToken
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/JoinInviteRequest"
+            example:
+              message: Let me in
+              userDisplayName: "{{displayName}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/JoinInviteResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '202':
+          description: Private group join request created.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/JoinInviteResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/leave":
+    delete:
+      tags:
+      - FE - Groups And Invites
+      summary: Leave group
+      operationId: delete_friends_groups_friendsGroupId_leave
+      description: 'FE placement: group settings/member actions. Purpose: lets the
+        current user leave a friends group. Members leave immediately. Owners can
+        only leave when they are the final member; that archives the group and preserves
+        history.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/LeaveGroupResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '409':
+          description: Owner must transfer ownership or remove members before leaving.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/members":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: Owner lists group members
+      operationId: get_friends_groups_friendsGroupId_members
+      description: 'FE placement: owner member-management screen. Purpose: returns
+        group members with profile previews and action flags for remove/transfer
+        controls. Requires current user to be the group owner. Use matchweek overview
+        for dashboard member display.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Owner member-management list.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OwnerMemberListResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Current user is not the group owner.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Friends group or owner membership not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/members/{userId}":
+    delete:
+      tags:
+      - FE - Groups And Invites
+      summary: Owner removes member
+      operationId: delete_friends_groups_friendsGroupId_members_userId
+      description: 'FE placement: owner member-management screen. Purpose: lets the
+        group owner remove a member from the friends group. Owners cannot kick themselves;
+        use leave instead.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Member removed.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/RemoveMemberResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '409':
+          description: Cannot remove group owner.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/transfer-ownership":
+    post:
+      tags:
+      - FE - Groups And Invites
+      summary: Transfer ownership
+      operationId: post_friends_groups_friendsGroupId_transfer_ownership
+      description: 'FE placement: owner member-management screen. Purpose: transfers
+        group ownership to an existing member. The new owner must not already own
+        another active friends group.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransferOwnershipRequest"
+            example:
+              newOwnerUserId: "{{newOwnerUserId}}"
+      responses:
+        '200':
+          description: Ownership transferred.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransferOwnershipResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '409':
+          description: New owner already owns an active friends group.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/competitions":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: List competition catalog
+      operationId: get_friends_groups_competitions
+      description: 'FE placement: create-friends-group league select. Purpose:
+        lists real football competitions and current season metadata for display
+        to. Backend self-syncs missing current season data from SportMonks once,
+        then returns DB rows. Notes: send provider_league_id as providerLeagueId
+        when creating the group; backend resolves the current season.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CompetitionCatalogResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/me/groups":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: My groups
+      operationId: get_friends_groups_me_groups
+      description: 'FE placement: dashboard and group switcher. Purpose: lists friends
+        groups current user belongs to, including invite_token and joinLink so the
+        FE can rebuild share/invite UI after reload or cache clear. Also includes
+        friends_group.league and friends_group.currentMatchweek so group cards can
+        show labels like Premier League week 12. Includes score as the current user''s
+        cumulative season/group score summary for each group.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MyGroupsResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/request/status":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: My join request status
+      operationId: get_friends_groups_friendsGroupId_request_status
+      description: 'FE placement: private invite/group pending screen. Purpose: shows
+        whether the current user request is pending, approved, or rejected.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/JoinRequestStatusResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/requests/{joinRequestId}/approve":
+    post:
+      tags:
+      - FE - Groups And Invites
+      summary: 'Owner: approve join request'
+      operationId: post_friends_groups_requests_joinRequestId_approve
+      description: 'FE placement: owner approve button. Purpose: approves a private
+        join request and adds the user as group member.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: joinRequestId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/JoinRequestReviewResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/requests/pending":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: 'Owner: list pending join requests'
+      operationId: get_friends_groups_friendsGroupId_requests_pending
+      description: 'FE placement: owner pending-requests badge/list. Purpose: focused
+        queue of pending private join requests.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PendingJoinRequestsResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/requests/{joinRequestId}/reject":
+    post:
+      tags:
+      - FE - Groups And Invites
+      summary: 'Owner: reject join request'
+      operationId: post_friends_groups_requests_joinRequestId_reject
+      description: 'FE placement: owner reject button. Purpose: rejects a private
+        join request without adding membership.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: joinRequestId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/JoinRequestReviewResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/invite/{inviteToken}":
+    get:
+      tags:
+      - FE - Groups And Invites
+      summary: Preview invite link
+      operationId: get_friends_groups_invite_inviteToken
+      description: 'FE placement: invite landing page opened from shared link. Purpose:
+        validates inviteToken and displays group name, open/private access type, and
+        member count before user joins.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Groups And Invites
+      parameters:
+      - name: inviteToken
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InvitePreviewResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/health":
+    get:
+      tags:
+      - FE - Health
+      summary: Health check
+      operationId: get_health
+      description: 'FE placement: optional developer diagnostics or app boot health
+        banner. Purpose: confirms the backend process is reachable before testing
+        auth/app flows. Notes: no auth required.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Health
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            text/html:
+              schema:
+                "$ref": "#/components/schemas/HealthResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+  "/weekly-score/{friendsGroupId}/leaderboard":
+    get:
+      tags:
+      - FE - Leaderboard
+      summary: Leaderboard
+      operationId: get_weekly_score_friendsGroupId_leaderboard
+      description: 'FE placement: standings/leaderboard screen or trophy icon. Purpose:
+        returns season ranking for a friends group. Matchweek overview already embeds
+        leaderboard context for the selected week.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Leaderboard
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/LeaderboardResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/matchweeks/current/overview":
+    get:
+      tags:
+      - FE - Matchweek Overview
+      summary: Current matchweek overview
+      operationId: get_friends_groups_friendsGroupId_matchweeks_current_overview
+      description: >-
+        FE placement: first load for the swipeable matchweek dashboard/commentary
+        screen. Purpose: backend chooses the active matchweek and returns one full
+        snapshot: fixtures, my prediction, revealed member predictions when allowed,
+        selected-matchweek scores, members, navigation, permissions, and live chat.
+        Notes: scores.rows contains compact selected-matchweek score rows only; FE
+        finds the current user's row by user_id. Season totals are on the group APIs
+        or leaderboard endpoint. Read-only; no SportMonks or LLM call; poll this
+        every 30-60 seconds when permissions.shouldPoll is true.
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Matchweek Overview
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MatchweekOverviewResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/matchweeks/{matchweek}/overview":
+    get:
+      tags:
+      - FE - Matchweek Overview
+      summary: Specific matchweek overview
+      operationId: get_friends_groups_friendsGroupId_matchweeks_matchweek_overview
+      description: >-
+        FE placement: user swipes to previous/next matchweek. Purpose:
+        loads the same complete overview snapshot for a selected matchweek. Notes:
+        before lock it only returns the current user prediction; after lock/finished
+        it reveals submitted member predictions and readonly selected-matchweek score/history
+        data. scores.rows contains compact selected-matchweek score rows only; FE
+        finds the current user's row by user_id. Season totals are on the group APIs
+        or leaderboard endpoint.
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Matchweek Overview
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: matchweek
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MatchweekOverviewResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/matchweeks/{matchweek}/predictions/mine":
+    delete:
+      tags:
+      - FE - Prediction Slip
+      summary: Delete my matchweek prediction slip
+      operationId: delete_friends_groups_friendsGroupId_matchweeks_matchweek_predictions_mine
+      description: 'FE placement: reset/clear draft action before lock. Purpose: deletes
+        current user saved slip and submission for that matchweek.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Prediction Slip
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: matchweek
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DeletePredictionSlipResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+    get:
+      tags:
+      - FE - Prediction Slip
+      summary: Get my matchweek prediction slip
+      operationId: get_friends_groups_friendsGroupId_matchweeks_matchweek_predictions_mine
+      description: 'FE placement: prediction slip screen load. Purpose: returns matchweek
+        fixtures, current user saved score predictions, selected red-card fixture,
+        submitted flag, and locked flag.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Prediction Slip
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: matchweek
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PredictionSlipResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+    put:
+      tags:
+      - FE - Prediction Slip
+      summary: Save my matchweek prediction slip
+      operationId: put_friends_groups_friendsGroupId_matchweeks_matchweek_predictions_mine
+      description: 'FE placement: prediction slip autosave/save button. Purpose: saves
+        full matchweek slip before lock. Notes: body must include score prediction
+        for every fixture and exactly one redCardFixtureId.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Prediction Slip
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: matchweek
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SavePredictionSlipRequest"
+            example:
+              predictions:
+              - fixtureId: "{{fixtureId}}"
+                homeScore: 2
+                awayScore: 1
+              redCardFixtureId: "{{fixtureId}}"
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PredictionSlipResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/friends-groups/{friendsGroupId}/matchweeks/{matchweek}/predictions/mine/submit":
+    post:
+      tags:
+      - FE - Prediction Slip
+      summary: Submit my matchweek prediction slip
+      operationId: post_friends_groups_friendsGroupId_matchweeks_matchweek_predictions_mine_submit
+      description: 'FE placement: final submit/confirm button on prediction slip.
+        Purpose: validates complete slip and marks it scoreable. Notes: after first
+        fixture starts, submit is rejected.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Prediction Slip
+      parameters:
+      - name: friendsGroupId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: matchweek
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PredictionSlipResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+  "/profiles/id":
+    get:
+      tags:
+      - FE - Profile Settings
+      summary: My profile
+      operationId: get_profiles_id
+      description: 'FE placement: account/settings screen. Purpose: loads current
+        user profile row.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Profile Settings
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProfileResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+    put:
+      tags:
+      - FE - Profile Settings
+      summary: Update profile
+      operationId: put_profiles_id
+      description: 'FE placement: account/settings save button. Purpose: updates display
+        name/avatar/color/favorite team and active group preferences.'
+      x-fe-scope: frontend
+      x-bruno-folder: FE App APIs - Use These In Frontend/Profile Settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/UpdateProfileRequest"
+            example:
+              display_name: "{{displayName}}"
+              favorite_team: Arsenal
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageResponse"
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '403':
+          description: Forbidden for the current user.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '404':
+          description: Resource not found.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      security:
+      - cookieAuth: []
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sb-access-token
+      description: Supabase session cookies set by /auth/sign-in or /auth/sign-up.
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+      required:
+      - error
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    LeaveGroupResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+              - left
+              - archived
+          required:
+          - status
+      required:
+      - data
+    OwnerMember:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+          - owner
+          - member
+        joinedAt:
+          type: string
+          format: date-time
+        profile:
+          "$ref": "#/components/schemas/ProfilePreview"
+          nullable: true
+        canRemove:
+          type: boolean
+          description: True when the owner can remove this member.
+        canTransferOwnership:
+          type: boolean
+          description: True when the owner can transfer ownership to this member.
+      required:
+      - userId
+      - role
+      - joinedAt
+      - profile
+      - canRemove
+      - canTransferOwnership
+    OwnerMemberListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OwnerMember"
+      required:
+      - data
+    RemoveMemberResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+              - removed
+            friendsGroupId:
+              type: string
+              format: uuid
+            removedUserId:
+              type: string
+              format: uuid
+          required:
+          - status
+          - friendsGroupId
+          - removedUserId
+      required:
+      - data
+    TransferOwnershipRequest:
+      type: object
+      properties:
+        newOwnerUserId:
+          type: string
+          format: uuid
+      required:
+      - newOwnerUserId
+    TransferOwnershipResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+              - transferred
+            friendsGroupId:
+              type: string
+              format: uuid
+            previousOwnerUserId:
+              type: string
+              format: uuid
+            newOwnerUserId:
+              type: string
+              format: uuid
+          required:
+          - status
+          - friendsGroupId
+          - previousOwnerUserId
+          - newOwnerUserId
+      required:
+      - data
+    HealthResponse:
+      type: string
+      description: Plain text health response.
+      example: I'm alive!
+    JsonObject:
+      type: object
+      additionalProperties: true
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+        app_metadata:
+          type: object
+          properties: {}
+          additionalProperties: true
+      required:
+      - id
+    AuthMeResponse:
+      type: object
+      properties:
+        user:
+          "$ref": "#/components/schemas/AuthUser"
+      required:
+      - user
+    AuthSignInRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+      required:
+      - email
+      - password
+    AuthSignUpRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        displayName:
+          type: string
+          nullable: true
+        redirectTo:
+          type: string
+          format: uri
+          nullable: true
+      required:
+      - email
+      - password
+    AuthSignInResponse:
+      type: object
+      properties:
+        user:
+          "$ref": "#/components/schemas/AuthUser"
+      required:
+      - user
+    AuthSignUpResponse:
+      type: object
+      properties:
+        user:
+          "$ref": "#/components/schemas/AuthUser"
+          nullable: true
+        session:
+          type: object
+          properties: {}
+          additionalProperties: true
+          nullable: true
+        profile:
+          "$ref": "#/components/schemas/Profile"
+          nullable: true
+    ProfilePreview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          nullable: true
+        avatar_emoji:
+          type: string
+          nullable: true
+        color_class:
+          type: string
+          nullable: true
+      required:
+      - id
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          nullable: true
+        avatar_emoji:
+          type: string
+          nullable: true
+        color_class:
+          type: string
+          nullable: true
+        favorite_team:
+          type: string
+          nullable: true
+        default_friends_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        last_active_friends_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        points:
+          type: integer
+        is_admin:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+    ProfileResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/Profile"
+      required:
+      - data
+    UpdateProfileRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          nullable: true
+        avatar_emoji:
+          type: string
+          nullable: true
+        color_class:
+          type: string
+          nullable: true
+        favorite_team:
+          type: string
+          nullable: true
+        default_friends_group_id:
+          type: string
+          format: uuid
+          nullable: true
+    FriendsGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        created_by:
+          type: string
+          format: uuid
+        invite_token:
+          type: string
+        is_open:
+          type: boolean
+        status:
+          type: string
+          enum:
+          - approved
+          - pending
+          - rejected
+          - archived
+        review_note:
+          type: string
+          nullable: true
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        reviewed_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - slug
+      - created_by
+      - invite_token
+      - is_open
+      - status
+    FriendsGroupOverview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        is_open:
+          type: boolean
+        status:
+          type: string
+        created_by:
+          type: string
+          format: uuid
+      required:
+      - id
+      - name
+      - slug
+      - is_open
+      - status
+      - created_by
+    FootballSeason:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        competition_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        provider_season_id:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        starts_at:
+          type: string
+          format: date
+          nullable: true
+        ends_at:
+          type: string
+          format: date
+          nullable: true
+        is_current:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FootballCompetition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        provider_league_id:
+          type: integer
+        name:
+          type: string
+        country_name:
+          type: string
+          nullable: true
+        logo_url:
+          type: string
+          format: uri
+          nullable: true
+        current_provider_season_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        seasons:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FootballSeason"
+      required:
+      - id
+      - provider_league_id
+      - name
+    CompetitionCatalogResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FootballCompetition"
+      required:
+      - data
+    FriendsGroupSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        friends_group_id:
+          type: string
+          format: uuid
+        competition_id:
+          type: string
+          format: uuid
+        season_id:
+          type: string
+          format: uuid
+          nullable: true
+        provider:
+          type: string
+        provider_league_id:
+          type: integer
+        provider_season_id:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum:
+          - active
+          - pending
+          - rejected
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    HydrationResult:
+      type: object
+      properties:
+        skipped:
+          type: boolean
+        reason:
+          type: string
+        fixturesSynced:
+          type: integer
+        fixturesFound:
+          type: integer
+        subscriptionsFound:
+          type: integer
+        targetsRefreshed:
+          type: integer
+      additionalProperties: true
+    CreateFriendsGroupRequest:
+      type: object
+      properties:
+        payload:
+          type: object
+          properties:
+            name:
+              type: string
+            slug:
+              type: string
+              description: Lowercase kebab-case slug.
+            accessType:
+              type: string
+              enum:
+              - open
+              - private
+            subscription:
+              type: object
+              properties:
+                providerLeagueId:
+                  type: integer
+                competitionName:
+                  type: string
+                  description: Optional display override. Backend prefers catalog data.
+                countryName:
+                  type: string
+                  nullable: true
+                  description: Optional display override. Backend prefers catalog data.
+                logoUrl:
+                  type: string
+                  format: uri
+                  nullable: true
+                  description: Optional display override. Backend prefers catalog data.
+              required:
+              - providerLeagueId
+          required:
+          - name
+          - slug
+          - accessType
+          - subscription
+      required:
+      - payload
+    CreateFriendsGroupResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/FriendsGroup"
+        joinLink:
+          type: string
+        competition:
+          "$ref": "#/components/schemas/FootballCompetition"
+          nullable: true
+        subscription:
+          "$ref": "#/components/schemas/FriendsGroupSubscription"
+          nullable: true
+        hydration:
+          "$ref": "#/components/schemas/HydrationResult"
+          nullable: true
+      required:
+      - data
+      - joinLink
+    SlugCheckResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            available:
+              type: boolean
+              description: True when no friends group currently uses the slug.
+          required:
+          - available
+      required:
+      - data
+    InvitePreview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        accessType:
+          type: string
+          enum:
+          - open
+          - private
+        memberCount:
+          type: integer
+      required:
+      - id
+      - name
+      - slug
+      - accessType
+      - memberCount
+    InvitePreviewResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/InvitePreview"
+      required:
+      - data
+    JoinInviteRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          nullable: true
+        userDisplayName:
+          type: string
+          nullable: true
+    JoinInviteResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - joined
+          - requested
+          - member
+        friendsGroupId:
+          type: string
+          format: uuid
+      required:
+      - status
+      - friendsGroupId
+    GroupCardLeague:
+      type: object
+      nullable: true
+      properties:
+        providerLeagueId:
+          type: integer
+        providerSeasonId:
+          type: integer
+          nullable: true
+        name:
+          type: string
+        countryName:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+        seasonName:
+          type: string
+          nullable: true
+      required:
+      - providerLeagueId
+      - providerSeasonId
+      - name
+      - countryName
+      - logoUrl
+      - seasonName
+    GroupCardMatchweek:
+      type: object
+      nullable: true
+      properties:
+        matchweek:
+          type: string
+          example: Matchweek 12
+        weekNumber:
+          type: integer
+          nullable: true
+          example: 12
+        state:
+          type: string
+          enum:
+          - upcoming
+          - live
+          - finished
+        displayLabel:
+          type: string
+          example: Premier League week 12
+      required:
+      - matchweek
+      - weekNumber
+      - state
+      - displayLabel
+    GroupSeasonScoreSummary:
+      type: object
+      description: Current user's cumulative season/group score summary for this
+        friends group. Values are totals across all scored matchweeks so far, not
+        one selected matchweek.
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        fixtures_predicted:
+          type: integer
+        exact_score_points:
+          type: integer
+          description: Total exact scoreline bonus points across the season so far.
+        correct_result_points:
+          type: integer
+          description: Total correct result points across the season so far.
+        total_goals_bonus:
+          type: integer
+          description: Total matchweek total-goals bonus points across the season
+            so far.
+        red_card_bonus:
+          type: integer
+          description: Total red-card bonus points across the season so far.
+        points_earned:
+          type: integer
+          description: Current user's season total points inside this friends group.
+        weeks_played:
+          type: integer
+        rank:
+          type: integer
+          nullable: true
+          description: Current user's season rank inside this friends group. Null
+            when no matchweeks have been scored yet.
+      required:
+      - user_id
+      - fixtures_predicted
+      - exact_score_points
+      - correct_result_points
+      - total_goals_bonus
+      - red_card_bonus
+      - points_earned
+      - weeks_played
+      - rank
+    MyGroup:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - owner
+          - member
+        joined_at:
+          type: string
+          format: date-time
+        friends_group:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            slug:
+              type: string
+            created_by:
+              type: string
+              format: uuid
+            invite_token:
+              type: string
+              description: Stable invite token for this friends group. FE can use it
+                to rebuild the invite link after reload.
+            is_open:
+              type: boolean
+            accessType:
+              type: string
+              enum:
+              - open
+              - private
+            joinLink:
+              type: string
+              example: "/join/abc123"
+            status:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            league:
+              "$ref": "#/components/schemas/GroupCardLeague"
+            currentMatchweek:
+              "$ref": "#/components/schemas/GroupCardMatchweek"
+          required:
+          - id
+          - name
+          - slug
+          - created_by
+          - invite_token
+          - is_open
+          - accessType
+          - joinLink
+          - status
+          - league
+          - currentMatchweek
+        score:
+          "$ref": "#/components/schemas/GroupSeasonScoreSummary"
+      required:
+      - role
+      - joined_at
+      - friends_group
+      - score
+    MyGroupsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MyGroup"
+      required:
+      - data
+    JoinRequestStatusResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+              - pending
+              - approved
+              - rejected
+          required:
+          - status
+          nullable: true
+        message:
+          type: string
+    JoinRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        friends_group_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+        message:
+          type: string
+          nullable: true
+        user_display_name:
+          type: string
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        processed_by:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - id
+      - friends_group_id
+      - user_id
+      - status
+    JoinRequestReviewResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            friends_group_id:
+              type: string
+              format: uuid
+            user_id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum:
+              - approved
+              - rejected
+          required:
+          - id
+          - friends_group_id
+          - user_id
+          - status
+      required:
+      - data
+    PendingJoinRequestsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/JoinRequest"
+      required:
+      - data
+    FixtureOverview:
+      type: object
+      properties:
+        id:
+          type: integer
+        sm_fixture_id:
+          type: integer
+        home_team:
+          type: string
+        away_team:
+          type: string
+        home_score:
+          type: integer
+          nullable: true
+        away_score:
+          type: integer
+          nullable: true
+        live_home_score:
+          type: integer
+          nullable: true
+        live_away_score:
+          type: integer
+          nullable: true
+        has_red_card:
+          type: boolean
+          nullable: true
+        current_minute:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum:
+          - scheduled
+          - live
+          - finished
+          - postponed
+          - cancelled
+        match_date:
+          type: string
+          format: date
+        match_time:
+          type: string
+        starting_at:
+          type: string
+          format: date-time
+          nullable: true
+        matchweek:
+          type: string
+          nullable: true
+      required:
+      - id
+      - home_team
+      - away_team
+      - status
+      - match_date
+      - match_time
+    MatchweekFixture:
+      type: object
+      properties:
+        id:
+          type: integer
+        home_team:
+          type: string
+        away_team:
+          type: string
+        home_score:
+          type: integer
+          nullable: true
+        away_score:
+          type: integer
+          nullable: true
+        has_red_card:
+          type: boolean
+          nullable: true
+        status:
+          type: string
+          enum:
+          - scheduled
+          - live
+          - finished
+          - postponed
+          - cancelled
+        match_date:
+          type: string
+          format: date
+        match_time:
+          type: string
+        starting_at:
+          type: string
+          format: date-time
+          nullable: true
+        matchweek:
+          type: string
+          nullable: true
+      required:
+      - id
+      - home_team
+      - away_team
+      - status
+      - match_date
+      - match_time
+    ScorePrediction:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        fixture_id:
+          type: integer
+        home_score_prediction:
+          type: integer
+        away_score_prediction:
+          type: integer
+      required:
+      - user_id
+      - fixture_id
+      - home_score_prediction
+      - away_score_prediction
+    PredictionRow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        friends_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        fixture_id:
+          type: integer
+        home_score_prediction:
+          type: integer
+        away_score_prediction:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - user_id
+      - fixture_id
+      - home_score_prediction
+      - away_score_prediction
+    PredictionSlipSummary:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        submitted:
+          type: boolean
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        locked:
+          type: boolean
+        predictions:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ScorePrediction"
+        redCardFixtureId:
+          type: integer
+          nullable: true
+      required:
+      - userId
+      - submitted
+      - locked
+      - predictions
+      - redCardFixtureId
+    PredictionSlipData:
+      type: object
+      properties:
+        friendsGroupId:
+          type: string
+          format: uuid
+        matchweek:
+          type: string
+        locked:
+          type: boolean
+        submitted:
+          type: boolean
+        fixtures:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MatchweekFixture"
+        predictions:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PredictionRow"
+        redCardFixtureId:
+          type: integer
+          nullable: true
+      required:
+      - friendsGroupId
+      - matchweek
+      - locked
+      - submitted
+      - fixtures
+      - predictions
+      - redCardFixtureId
+    PredictionSlipResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/PredictionSlipData"
+      required:
+      - data
+    SavePredictionSlipRequest:
+      type: object
+      properties:
+        predictions:
+          type: array
+          items:
+            type: object
+            properties:
+              fixtureId:
+                type: integer
+              homeScore:
+                type: integer
+              awayScore:
+                type: integer
+            required:
+            - fixtureId
+            - homeScore
+            - awayScore
+        redCardFixtureId:
+          type: integer
+        redCardFixtureIds:
+          type: array
+          items:
+            type: integer
+      required:
+      - predictions
+    DeletePredictionSlipResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            deleted:
+              type: boolean
+          required:
+          - deleted
+      required:
+      - data
+    WeeklyScore:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        friends_group_id:
+          type: string
+          format: uuid
+        week_number:
+          type: integer
+        fixtures_predicted:
+          type: integer
+        exact_score_points:
+          type: integer
+          description: Exact scoreline bonus points. Exact scoreline is worth 2 bonus points on top of the 1 correct-result point.
+        correct_result_points:
+          type: integer
+          description: Correct result points. One point per fixture for correctly predicting home win, away win, or draw.
+        total_goals_bonus:
+          type: integer
+          description: Matchweek total-goals bonus. Two points for each nearest player when comparing predicted total goals across the full matchweek against actual total goals.
+        red_card_bonus:
+          type: integer
+          description: Red-card bonus. Five points when the selected red-card fixture has a red card.
+        points_earned:
+          type: integer
+        group_points:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MatchweekScoreRow:
+      type: object
+      description: Compact score breakdown for the selected matchweek only. It intentionally
+        omits group id, week number, fixture prediction count, and cumulative season
+        totals because those belong elsewhere in the overview or group APIs.
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        exact_score_points:
+          type: integer
+          description: Exact scoreline bonus points. Exact scoreline is worth 2 bonus points on top of the 1 correct-result point.
+        correct_result_points:
+          type: integer
+          description: Correct result points. One point per fixture for correctly predicting home win, away win, or draw.
+        total_goals_bonus:
+          type: integer
+          description: Matchweek total-goals bonus. Two points for each nearest player when comparing predicted total goals across the full matchweek against actual total goals.
+        red_card_bonus:
+          type: integer
+          description: Red-card bonus. Five points when the selected red-card fixture has a red card.
+        points_earned:
+          type: integer
+          description: Points earned in this one selected matchweek only.
+        provisional:
+          type: boolean
+        rank:
+          type: integer
+          description: Rank among visible score rows for the selected matchweek.
+    LeaderboardRow:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        friends_group_id:
+          type: string
+          format: uuid
+        points:
+          type: integer
+        fixtures_predicted:
+          type: integer
+        exact_score_points:
+          type: integer
+          description: Exact scoreline bonus points. Exact scoreline is worth 2 bonus points on top of the 1 correct-result point.
+        correct_result_points:
+          type: integer
+          description: Correct result points. One point per fixture for correctly predicting home win, away win, or draw.
+        total_goals_bonus:
+          type: integer
+          description: Matchweek total-goals bonus. Two points for each nearest player when comparing predicted total goals across the full matchweek against actual total goals.
+        red_card_bonus:
+          type: integer
+          description: Red-card bonus. Five points when the selected red-card fixture has a red card.
+        weeks_played:
+          type: integer
+        rank:
+          type: integer
+        profile:
+          "$ref": "#/components/schemas/ProfilePreview"
+          nullable: true
+    LeaderboardResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/LeaderboardRow"
+      required:
+      - data
+    LiveFeedEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        friends_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        fixture_id:
+          type: integer
+          nullable: true
+        sm_fixture_id:
+          type: integer
+          nullable: true
+        matchweek:
+          type: string
+          nullable: true
+        event_key:
+          type: string
+        event_type:
+          type: string
+        ai_message:
+          type: string
+          nullable: true
+        payload:
+          type: object
+          properties: {}
+          additionalProperties: true
+        pushed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    MatchweekOverviewMember:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+          - owner
+          - member
+        joinedAt:
+          type: string
+          format: date-time
+        profile:
+          "$ref": "#/components/schemas/ProfilePreview"
+          nullable: true
+        submitted:
+          type: boolean
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        score:
+          "$ref": "#/components/schemas/MatchweekScoreRow"
+        prediction:
+          "$ref": "#/components/schemas/PredictionSlipSummary"
+          nullable: true
+    MatchweekOverview:
+      type: object
+      properties:
+        friendsGroup:
+          "$ref": "#/components/schemas/FriendsGroupOverview"
+        selectedMatchweek:
+          type: string
+        state:
+          type: string
+          enum:
+          - editable
+          - locked
+          - live
+          - finished
+        navigation:
+          type: object
+          properties:
+            current:
+              type: string
+            previous:
+              type: string
+              nullable: true
+            next:
+              type: string
+              nullable: true
+            available:
+              type: array
+              items:
+                type: string
+          required:
+          - current
+          - previous
+          - next
+          - available
+        permissions:
+          type: object
+          properties:
+            canEditPredictions:
+              type: boolean
+            canSubmitPredictions:
+              type: boolean
+            canViewAllPredictions:
+              type: boolean
+            shouldPoll:
+              type: boolean
+          required:
+          - canEditPredictions
+          - canSubmitPredictions
+          - canViewAllPredictions
+          - shouldPoll
+        fixtures:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FixtureOverview"
+        myPrediction:
+          "$ref": "#/components/schemas/PredictionSlipSummary"
+        members:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MatchweekOverviewMember"
+        scores:
+          type: object
+          description: Matchweek scoring context for the selected matchweek only.
+            The current user's score is included in `rows`; FE can find it by matching
+            `user_id` against the signed-in user. Season totals are returned by the
+            group APIs or leaderboard endpoint, not here.
+          properties:
+            rows:
+              type: array
+              items:
+                "$ref": "#/components/schemas/MatchweekScoreRow"
+          required:
+          - rows
+        liveFeed:
+          type: array
+          items:
+            "$ref": "#/components/schemas/LiveFeedEvent"
+        locksAt:
+          type: string
+          format: date-time
+          description: Earliest kickoff for the selected matchweek. FE should use
+            this as the countdown target for prediction lock.
+      required:
+      - friendsGroup
+      - selectedMatchweek
+      - state
+      - navigation
+      - permissions
+      - fixtures
+      - myPrediction
+      - members
+      - scores
+      - liveFeed
+      - locksAt
+    MatchweekOverviewResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/MatchweekOverview"
+      required:
+      - data
+    CalculateScoresRequest:
+      type: object
+      properties:
+        matchweek:
+          type: string
+      required:
+      - matchweek
+    WeeklyScoreUpsertRequest:
+      type: object
+      properties:
+        weeklyScores:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WeeklyScore"
+      required:
+      - weeklyScores
+    ScoreCalculationResult:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WeeklyScore"
+        fixturesScored:
+          type: integer
+        submittedUsers:
+          type: integer
+        friendsGroupId:
+          type: string
+          format: uuid
+        matchweek:
+          type: string
+    ScoreCalculationResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/ScoreCalculationResult"
+      required:
+      - data
+    CalculateAllScoresResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ScoreCalculationResult"
+      required:
+      - data
+    WeeklyScoreUpsertResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WeeklyScore"
+      required:
+      - data
+    MatchEventRequest:
+      type: object
+      properties:
+        fixture_id:
+          type: integer
+          nullable: true
+        sm_fixture_id:
+          type: integer
+          nullable: true
+        event_type:
+          type: string
+        minute:
+          type: integer
+        player_name:
+          type: string
+        assist_player:
+          type: string
+          nullable: true
+        team:
+          type: string
+        provider_payload:
+          type: object
+          properties: {}
+          additionalProperties: true
+      required:
+      - event_type
+      - minute
+      - player_name
+      - team
+    MatchEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fixture_id:
+          type: integer
+          nullable: true
+        sm_fixture_id:
+          type: integer
+          nullable: true
+        sm_event_id:
+          type: integer
+          nullable: true
+        event_type:
+          type: string
+        minute:
+          type: integer
+        player_name:
+          type: string
+        assist_player:
+          type: string
+          nullable: true
+        team:
+          type: string
+        provider:
+          type: string
+        provider_payload:
+          type: object
+          properties: {}
+          additionalProperties: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    MatchEventResponse:
+      type: object
+      properties:
+        data:
+          "$ref": "#/components/schemas/MatchEvent"
+      required:
+      - data
+    HydrateFullRequest:
+      type: object
+      properties:
+        providerLeagueIds:
+          type: array
+          items:
+            type: integer
+    HydrateLeagueSeasonRequest:
+      type: object
+      properties:
+        providerLeagueId:
+          type: integer
+        providerSeasonId:
+          type: integer
+          nullable: true
+      required:
+      - providerLeagueId
+    HydrateMatchweekRequest:
+      type: object
+      properties:
+        matchweek:
+          type: string
+      required:
+      - matchweek
+    HydrateRangeRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+      required:
+      - startDate
+      - endDate
+    HydrateUpcomingRequest:
+      type: object
+      properties:
+        days:
+          type: integer
+        providerLeagueIds:
+          type: array
+          items:
+            type: integer
+    HydrateFinishedRequest:
+      type: object
+      properties:
+        days:
+          type: integer
+    HydrationJobResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        stats:
+          "$ref": "#/components/schemas/HydrationResult"
+        scoring:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ScoreCalculationResult"
+      required:
+      - ok
+    LiveRefreshRequest:
+      type: object
+      properties:
+        providerLeagueIds:
+          type: array
+          items:
+            type: integer
+    LiveFixture:
+      type: object
+      properties:
+        id:
+          type: integer
+        sm_fixture_id:
+          type: integer
+        home_team:
+          type: string
+        away_team:
+          type: string
+        status:
+          type: string
+        current_minute:
+          type: integer
+          nullable: true
+        live_home_score:
+          type: integer
+          nullable: true
+        live_away_score:
+          type: integer
+          nullable: true
+        events:
+          type: array
+          items:
+            type: object
+            properties: {}
+            additionalProperties: true
+      additionalProperties: true
+    LiveRefreshResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/LiveFixture"
+      required:
+      - data
+    EmptyObject:
+      type: object
+      additionalProperties: false

@@ -1,0 +1,25 @@
+info:
+  name: Full hydration - internal SportMonks call
+  type: http
+  seq: 1700000043000
+http:
+  method: POST
+  url: '{{baseUrl}}/admin/fixtures/hydrate/full'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "providerLeagueIds": [
+          "{{providerLeagueId}}"
+        ]
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: manual full refresh/local smoke test. Purpose: runs upcoming plus recent finished hydration. Do not call from FE.'

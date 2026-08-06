@@ -1,0 +1,14 @@
+info:
+  name: My join request status
+  type: http
+  seq: 1700000016000
+http:
+  method: GET
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/request/status'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: private invite/group pending screen. Purpose: shows whether the current user request is pending, approved, or rejected.'

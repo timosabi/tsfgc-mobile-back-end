@@ -1,0 +1,20 @@
+info:
+  name: Calculate all finished scores - internal job
+  type: http
+  seq: 1700000046000
+http:
+  method: POST
+  url: '{{baseUrl}}/weekly-score/calculate-all'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: '{}'
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: scoring cron/manual local test. Purpose: calculates all active groups with finished fixtures. FE should only read resulting leaderboard/history APIs.'

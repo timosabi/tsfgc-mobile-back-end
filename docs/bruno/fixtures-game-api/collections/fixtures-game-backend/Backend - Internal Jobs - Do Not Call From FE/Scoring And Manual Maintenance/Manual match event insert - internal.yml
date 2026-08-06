@@ -1,0 +1,27 @@
+info:
+  name: Manual match event insert - internal
+  type: http
+  seq: 1700000048000
+http:
+  method: POST
+  url: '{{baseUrl}}/match-event'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "fixture_id": "{{fixtureId}}",
+        "event_type": "goal",
+        "minute": 10,
+        "player_name": "Test Player",
+        "team": "Home"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: local maintenance event creation. Purpose: inserts raw match event data. Do not call from FE.'

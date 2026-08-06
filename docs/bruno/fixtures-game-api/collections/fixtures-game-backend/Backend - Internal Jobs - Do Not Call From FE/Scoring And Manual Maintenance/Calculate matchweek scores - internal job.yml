@@ -1,0 +1,23 @@
+info:
+  name: Calculate matchweek scores - internal job
+  type: http
+  seq: 1700000045000
+http:
+  method: POST
+  url: '{{baseUrl}}/weekly-score/{{friendsGroupId}}/calculate'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "matchweek": "{{matchweek}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: scoring worker/manual local test after results are finished. Purpose: calculates one group matchweek scores. FE should only read resulting score/history APIs.'

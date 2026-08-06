@@ -1,0 +1,30 @@
+info:
+  name: Save my matchweek prediction slip
+  type: http
+  seq: 1700000026000
+http:
+  method: PUT
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/matchweeks/{{matchweek}}/predictions/mine'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "predictions": [
+          {
+            "fixtureId": "{{fixtureId}}",
+            "homeScore": 2,
+            "awayScore": 1
+          }
+        ],
+        "redCardFixtureId": "{{fixtureId}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: prediction slip autosave/save button. Purpose: saves full matchweek slip before lock. Notes: body must include score prediction for every fixture and exactly one redCardFixtureId.'

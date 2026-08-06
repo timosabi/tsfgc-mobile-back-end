@@ -1,0 +1,24 @@
+info:
+  name: Hydrate league season - internal SportMonks call
+  type: http
+  seq: 1700000038000
+http:
+  method: POST
+  url: '{{baseUrl}}/admin/fixtures/hydrate/league-season'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "providerLeagueId": "{{providerLeagueId}}",
+        "providerSeasonId": "{{providerSeasonId}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: group creation/hydration repair job. Purpose: fetches and stores fixture schedule for one league/season. Do not call from FE.'

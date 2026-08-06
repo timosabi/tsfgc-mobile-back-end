@@ -1,0 +1,23 @@
+info:
+  name: Hydrate matchweek - internal SportMonks call
+  type: http
+  seq: 1700000042000
+http:
+  method: POST
+  url: '{{baseUrl}}/admin/fixtures/hydrate/matchweek'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "matchweek": "{{matchweek}}"
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: admin data repair. Purpose: hydrates one league matchweek. Do not call from FE.'

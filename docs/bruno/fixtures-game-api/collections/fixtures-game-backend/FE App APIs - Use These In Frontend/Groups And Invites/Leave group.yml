@@ -1,0 +1,14 @@
+info:
+  name: Leave group
+  type: http
+  seq: 1700000020000
+http:
+  method: DELETE
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/leave'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: group settings/member actions. Purpose: lets the current user leave a friends group. Members leave immediately. Owners can only leave when they are the final member; that archives the group and preserves history. If other members remain, owner receives 409 and must transfer ownership or remove members first.'

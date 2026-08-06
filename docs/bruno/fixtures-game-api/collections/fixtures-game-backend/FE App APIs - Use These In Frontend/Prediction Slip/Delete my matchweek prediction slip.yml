@@ -1,0 +1,14 @@
+info:
+  name: Delete my matchweek prediction slip
+  type: http
+  seq: 1700000028000
+http:
+  method: DELETE
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/matchweeks/{{matchweek}}/predictions/mine'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: reset/clear draft action before lock. Purpose: deletes current user saved slip and submission for that matchweek.'

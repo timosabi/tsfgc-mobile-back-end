@@ -1,0 +1,102 @@
+name: local
+variables:
+  - name: baseUrl
+    value: 'http://localhost:3001'
+    enabled: true
+    secret: false
+    type: text
+  - name: email
+    value: test@example.com
+    enabled: true
+    secret: false
+    type: text
+  - name: password
+    value: Password123!
+    enabled: true
+    secret: false
+    type: text
+  - name: displayName
+    value: George
+    enabled: true
+    secret: false
+    type: text
+  - name: friendsGroupId
+    value: ''
+    enabled: true
+    secret: false
+    type: text
+  - name: friendsGroupSlug
+    value: local-test-group-1777989397084
+    enabled: true
+    secret: false
+    type: text
+  - name: fixtureId
+    value: '1'
+    enabled: true
+    secret: false
+    type: text
+  - name: matchweek
+    value: Matchweek 2
+    enabled: true
+    secret: false
+    type: text
+  - name: providerLeagueId
+    value: '8'
+    enabled: true
+    secret: false
+    type: text
+  - name: providerSeasonId
+    value: '25583'
+    enabled: true
+    secret: false
+    type: text
+  - name: userId
+    value: ''
+    enabled: true
+    secret: false
+    type: text
+  - name: joinRequestId
+    value: ''
+    enabled: true
+    secret: false
+    type: text
+  - name: targetWeek
+    value: '1'
+    enabled: true
+    secret: false
+    type: text
+  - name: competitionName
+    value: Premier League
+    enabled: true
+    secret: false
+    type: text
+  - name: competitionCountry
+    value: England
+    enabled: true
+    secret: false
+    type: text
+  - name: seasonName
+    value: 2025/2026
+    enabled: true
+    secret: false
+    type: text
+  - name: sportmonksUseMock
+    value: 'true'
+    enabled: true
+    secret: false
+    type: text
+  - name: inviteToken
+    value: ''
+    enabled: true
+    secret: false
+    type: text
+  - name: targetUserId
+    value: ''
+    enabled: true
+    secret: false
+    type: text
+  - name: newOwnerUserId
+    value: ''
+    enabled: true
+    secret: false
+    type: text

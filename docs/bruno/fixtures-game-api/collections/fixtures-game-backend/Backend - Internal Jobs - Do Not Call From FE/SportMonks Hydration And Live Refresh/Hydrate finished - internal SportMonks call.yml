@@ -1,0 +1,23 @@
+info:
+  name: Hydrate finished - internal SportMonks call
+  type: http
+  seq: 1700000040000
+http:
+  method: POST
+  url: '{{baseUrl}}/admin/fixtures/hydrate/finished'
+  auth: inherit
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "days": 7
+      }
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'Internal placement: recent-results refresh job/local test. Purpose: stores finished results/red-card outcomes; mock mode flips Matchweek 2. Do not call from FE.'

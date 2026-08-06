@@ -1,0 +1,14 @@
+info:
+  name: Me
+  type: http
+  seq: 1700000007000
+http:
+  method: GET
+  url: '{{baseUrl}}/auth/me'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: app bootstrap/session restore. Purpose: verifies current cookie session and returns auth user id/email.'

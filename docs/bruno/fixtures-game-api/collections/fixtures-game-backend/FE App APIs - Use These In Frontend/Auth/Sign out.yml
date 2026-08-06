@@ -1,0 +1,14 @@
+info:
+  name: Sign out
+  type: http
+  seq: 1700000008000
+http:
+  method: POST
+  url: '{{baseUrl}}/auth/sign-out'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: account menu/logout action. Purpose: clears local auth session cookies. Notes: returns 204 with no JSON body.'

@@ -1,0 +1,14 @@
+info:
+  name: Submit my matchweek prediction slip
+  type: http
+  seq: 1700000027000
+http:
+  method: POST
+  url: '{{baseUrl}}/friends-groups/{{friendsGroupId}}/matchweeks/{{matchweek}}/predictions/mine/submit'
+  auth: inherit
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+docs: 'FE placement: final submit/confirm button on prediction slip. Purpose: validates complete slip and marks it scoreable. Notes: after first fixture starts, submit is rejected.'
