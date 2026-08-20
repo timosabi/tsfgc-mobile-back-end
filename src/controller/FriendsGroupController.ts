@@ -14,6 +14,7 @@ export default class FriendsGroupController {
   constructor() {
     this.router.get("/competitions", asyncHandler(this.listCompetitions));
     this.router.get("/check-slug/:slug", asyncHandler(this.checkSlugExists));
+    this.router.get("/admin/all", asyncHandler(this.listAllGroupsForAdmin));
     this.router.post("/", asyncHandler(this.createFriendsGroup));
   }
 
@@ -231,6 +232,16 @@ export default class FriendsGroupController {
     return res.json({ data: { available } });
   };
 
+  listAllGroupsForAdmin = async (req: Request, res: Response) => {
+    const { auth, friendsGroup } = this.createServices(req, res);
+
+    await auth.requireAdmin();
+
+    const data = await friendsGroup.listAllGroupsForAdmin();
+
+    return res.json({ data });
+  };
+
   createFriendsGroup = async (req: Request, res: Response) => {
     const { auth, friendsGroup, subscriptionService, friendsGroupUsers, client } =
       this.createServices(req, res);
@@ -243,11 +254,6 @@ export default class FriendsGroupController {
 
     if (!payload) {
       throw new AppError("Invalid friends group payload (required)", 400);
-    }
-
-    const existingOwnedGroup = await friendsGroup.getOwnedFriendsGroup(user.id);
-    if (existingOwnedGroup) {
-      throw new AppError("User already owns a friends group", 409);
     }
 
     const name = this.asOptionalString(payload.name)?.trim();

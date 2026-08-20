@@ -38,9 +38,9 @@ function createService() {
     friendsGroups: createRepositoryMock<
       Pick<
         Repositories["friendsGroups"],
-        "archiveById" | "findById" | "findOwnedByUser" | "transferOwnership"
+        "archiveById" | "findById" | "transferOwnership"
       >
-    >(["archiveById", "findById", "findOwnedByUser", "transferOwnership"]),
+    >(["archiveById", "findById", "transferOwnership"]),
     profiles: createRepositoryMock<
       Pick<
         Repositories["profiles"],
@@ -457,7 +457,6 @@ describe("FriendsGroupUsersService", () => {
       created_by: "owner-a",
       status: "approved",
     } as Awaited<ReturnType<Repositories["friendsGroups"]["findById"]>>);
-    repositories.friendsGroups.findOwnedByUser.mockResolvedValue(null);
 
     await expect(
       service.transferOwnership({
@@ -504,42 +503,6 @@ describe("FriendsGroupUsersService", () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("blocks transfer to a member who already owns an active group", async () => {
-    const { repositories, service } = createService();
-    repositories.friendsGroupUsers.findMembership
-      .mockResolvedValueOnce({
-        id: "owner-membership",
-        friends_group_id: "group-1",
-        user_id: "owner-a",
-        role: "owner",
-        joined_at: "2026-05-14T00:00:00.000Z",
-      })
-      .mockResolvedValueOnce({
-        id: "member-membership",
-        friends_group_id: "group-1",
-        user_id: "member-a",
-        role: "member",
-        joined_at: "2026-05-14T00:00:00.000Z",
-      });
-    repositories.friendsGroups.findById.mockResolvedValue({
-      id: "group-1",
-      created_by: "owner-a",
-      status: "approved",
-    } as Awaited<ReturnType<Repositories["friendsGroups"]["findById"]>>);
-    repositories.friendsGroups.findOwnedByUser.mockResolvedValue({
-      id: "group-2",
-      name: "Owned",
-      slug: "owned",
-    });
-
-    await expect(
-      service.transferOwnership({
-        friendsGroupId: "group-1",
-        currentOwnerUserId: "owner-a",
-        newOwnerUserId: "member-a",
-      })
-    ).rejects.toMatchObject({ statusCode: 409 });
-  });
 });
 
 function overviewFixture(matchweek: string, status: string, startingAt: string) {

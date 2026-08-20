@@ -27,6 +27,10 @@ export default class FriendsGroupJoinRequestController {
       "/:friendsGroupId/requests/pending",
       asyncHandler(this.getPendingRequest)
     );
+    this.router.get(
+      "/join-requests/pending",
+      asyncHandler(this.getAllPendingRequestsForOwner)
+    );
   }
 
   private createServices(req: Request, res: Response) {
@@ -86,6 +90,19 @@ export default class FriendsGroupJoinRequestController {
     await this.requireOwnerOrAdmin(auth, friendsGroup, friendsGroupId, user.id);
 
     const data = await friendsGroupJoinRequest.getPendingRequest(friendsGroupId);
+
+    return res.json({ data });
+  };
+
+  getAllPendingRequestsForOwner = async (req: Request, res: Response) => {
+    const { auth, friendsGroupJoinRequest } = this.createServices(req, res);
+
+    const user = await auth.requireUser();
+    if (!user) throw new AppError("Unauthorized", 401);
+
+    const data = await friendsGroupJoinRequest.getAllPendingRequestsForOwner(
+      user.id
+    );
 
     return res.json({ data });
   };

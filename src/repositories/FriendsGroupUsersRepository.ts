@@ -142,4 +142,14 @@ export default class FriendsGroupUsersRepository extends BaseRepository<"friends
     this.throwOnError(error, "friends_group_users listGroupRefsForUser failed");
     return (data ?? []) as Array<Pick<TableRow<"friends_group_users">, "friends_group_id">>;
   }
+
+  async listOwnedGroupIdsForUser(userId: string): Promise<string[]> {
+    const { data, error } = await this.table()
+      .select("friends_group_id")
+      .eq("user_id", userId)
+      .eq("role", "owner");
+
+    this.throwOnError(error, "friends_group_users listOwnedGroupIdsForUser failed");
+    return (data ?? []).map((row) => row.friends_group_id as string);
+  }
 }

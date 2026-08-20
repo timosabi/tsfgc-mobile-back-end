@@ -315,13 +315,6 @@ export default class FriendsGroupUsersService {
       throw new AppError("New owner must already be a member of this friends group", 404);
     }
 
-    const targetOwnedGroup = await this.repositories.friendsGroups.findOwnedByUser(
-      params.newOwnerUserId
-    );
-    if (targetOwnedGroup && targetOwnedGroup.id !== params.friendsGroupId) {
-      throw new AppError("New owner already owns an active friends group", 409);
-    }
-
     await this.repositories.friendsGroups.transferOwnership({
       friendsGroupId: params.friendsGroupId,
       currentOwnerId: params.currentOwnerUserId,

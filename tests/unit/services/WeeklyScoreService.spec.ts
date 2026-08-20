@@ -25,6 +25,9 @@ function createService() {
         "findActiveByFriendsGroup" | "listActiveTargets"
       >
     >(["findActiveByFriendsGroup", "listActiveTargets"]),
+    friendsGroupUsers: createRepositoryMock<
+      Pick<Repositories["friendsGroupUsers"], "listMembers">
+    >(["listMembers"]),
     predictions: createRepositoryMock<
       Pick<Repositories["predictions"], "listByGroupFixturesUsers">
     >(["listByGroupFixturesUsers"]),
@@ -68,6 +71,7 @@ function createService() {
     redCardRow("user-a", 101),
     redCardRow("user-b", 102),
   ]);
+  repositories.friendsGroupUsers.listMembers.mockResolvedValue([]);
   repositories.weeklyScores.upsertScores.mockResolvedValue(null);
   repositories.weeklyScores.listByGroupWeek.mockResolvedValue([
     weeklyScoreRow("score-a", "user-a", 2, 11, 11),
@@ -176,6 +180,54 @@ describe("WeeklyScoreService", () => {
       ["user-c", 3, 3],
     ]);
     expect(leaderboard[0].profile?.display_name).toBe("Bianca");
+  });
+
+  it("includes group members with no weekly scores yet, ranked at zero points", async () => {
+    const { repositories, service } = createService();
+
+    repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([
+      weeklyScoreRow("score-a-1", "user-a", 1, 4, 4, {
+        exact_score_points: 1,
+        correct_result_points: 1,
+      }),
+    ]);
+    repositories.friendsGroupUsers.listMembers.mockResolvedValue([
+      { user_id: "user-a", joined_at: "2026-01-01T00:00:00Z", role: "owner" },
+      { user_id: "user-d", joined_at: "2026-01-02T00:00:00Z", role: "member" },
+    ]);
+    repositories.profiles.listPreviewsByIds.mockResolvedValue([
+      {
+        id: "user-a",
+        display_name: "Alex",
+        avatar_emoji: "A",
+        color_class: "blue",
+      },
+      {
+        id: "user-d",
+        display_name: "Dana",
+        avatar_emoji: "D",
+        color_class: "yellow",
+      },
+    ]);
+
+    const leaderboard = await service.getLeaderboard("group-1");
+
+    expect(leaderboard.map((row) => [row.user_id, row.rank, row.points])).toEqual([
+      ["user-a", 1, 4],
+      ["user-d", 2, 0],
+    ]);
+    expect(leaderboard[1].profile?.display_name).toBe("Dana");
+  });
+
+  it("returns an empty leaderboard for a group with no members", async () => {
+    const { repositories, service } = createService();
+
+    repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([]);
+    repositories.friendsGroupUsers.listMembers.mockResolvedValue([]);
+
+    const leaderboard = await service.getLeaderboard("group-1");
+
+    expect(leaderboard).toEqual([]);
   });
 
   it("calculates every finished matchweek for every active subscription", async () => {

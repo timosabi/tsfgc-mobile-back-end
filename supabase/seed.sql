@@ -13,7 +13,7 @@ values
     'Premier League',
     'England',
     'https://cdn.sportmonks.com/images/soccer/leagues/8/8.png',
-    25583
+    28083
   ),
   (
     'sportmonks',
@@ -51,10 +51,10 @@ insert into public.football_seasons (
 select
   c.id,
   'sportmonks',
-  25583,
-  '2025/2026',
-  '2025-08-15',
-  '2026-05-24',
+  28083,
+  '2026/2027',
+  '2026-08-21',
+  '2027-05-30',
   true
 from public.football_competitions c
 where c.provider = 'sportmonks'

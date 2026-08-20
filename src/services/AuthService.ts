@@ -105,6 +105,14 @@ export default class AuthService {
     return this.supabase.auth.signOut({ scope });
   }
 
+  updateEmail(newEmail: string) {
+    return this.supabase.auth.updateUser({ email: newEmail });
+  }
+
+  updatePassword(newPassword: string) {
+    return this.supabase.auth.updateUser({ password: newPassword });
+  }
+
   exchangeCode(code: string) {
     return this.supabase.auth.exchangeCodeForSession(code);
   }
@@ -139,5 +147,18 @@ export default class AuthService {
         500
       );
     }
+  }
+
+  async ensureProfileForUser(payload: {
+    userId: string;
+    email?: string | null;
+    displayName?: string;
+  }) {
+    const existing = await this.profiles.findProfileById(payload.userId);
+    if (existing) {
+      return existing;
+    }
+
+    return this.upsertProfileForUser(payload);
   }
 }

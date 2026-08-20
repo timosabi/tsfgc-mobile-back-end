@@ -40,6 +40,7 @@
     "@types/express-serve-static-core": "^5.0.7",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
     "express": "^4.18.2",
     "node-cron": "^4.2.1"
   },
@@ -51,7 +52,6 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.2.1",
     "babel-node": "^0.0.1-security",
-    "dotenv": "^17.2.1",
     "jest": "^30.0.5",
     "nodemon": "^2.0.22",
     "supabase": "^2.98.2",

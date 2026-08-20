@@ -9,7 +9,10 @@ export type FriendsGroupOverviewRow = Pick<
   TableRow<"friends_groups">,
   "id" | "name" | "slug" | "is_open" | "status" | "created_by"
 >;
-type OwnedFriendsGroupRef = Pick<TableRow<"friends_groups">, "id" | "name" | "slug">;
+export type FriendsGroupInviteRow = Pick<
+  TableRow<"friends_groups">,
+  "id" | "name" | "slug" | "is_open" | "invite_token" | "created_by"
+>;
 
 export default class FriendsGroupsRepository extends BaseRepository<"friends_groups"> {
   constructor(client: RepositoryClient) {
@@ -24,19 +27,6 @@ export default class FriendsGroupsRepository extends BaseRepository<"friends_gro
 
     this.throwOnError(error, "friends_groups findOverviewById failed");
     return (data ?? null) as FriendsGroupOverviewRow | null;
-  }
-
-  async findOwnedByUser(
-    userId: string
-  ): Promise<OwnedFriendsGroupRef | null> {
-    const { data, error } = await this.table()
-      .select("id, name, slug")
-      .eq("created_by", userId)
-      .in("status", ["pending", "approved"])
-      .maybeSingle();
-
-    this.throwOnError(error, "friends_groups findOwnedByUser failed");
-    return (data ?? null) as OwnedFriendsGroupRef | null;
   }
 
   async findByInviteToken(
@@ -103,5 +93,14 @@ export default class FriendsGroupsRepository extends BaseRepository<"friends_gro
 
     this.throwOnError(error, "friends_groups listApprovedNamesByIds failed");
     return (data ?? []) as Array<Pick<TableRow<"friends_groups">, "id" | "name">>;
+  }
+
+  async listAllApproved(): Promise<FriendsGroupInviteRow[]> {
+    const { data, error } = await this.table()
+      .select("id, name, slug, is_open, invite_token, created_by")
+      .eq("status", "approved");
+
+    this.throwOnError(error, "friends_groups listAllApproved failed");
+    return (data ?? []) as FriendsGroupInviteRow[];
   }
 }

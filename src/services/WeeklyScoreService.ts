@@ -44,6 +44,7 @@ type WeeklyScoreRepositories = Pick<
   Repositories,
   | "fixtures"
   | "friendsGroupSubscriptions"
+  | "friendsGroupUsers"
   | "predictions"
   | "profiles"
   | "redCardPredictions"
@@ -263,21 +264,30 @@ export default class WeeklyScoreService {
   }
 
   async getLeaderboard(friendsGroupId: string) {
-    const scores = await this.getAllWeeklyScores(friendsGroupId);
+    const [scores, members] = await Promise.all([
+      this.getAllWeeklyScores(friendsGroupId),
+      this.repositories.friendsGroupUsers.listMembers(friendsGroupId),
+    ]);
+
+    const emptyRow = (userId: string): LeaderboardRow => ({
+      user_id: userId,
+      friends_group_id: friendsGroupId,
+      points: 0,
+      fixtures_predicted: 0,
+      exact_score_points: 0,
+      correct_result_points: 0,
+      total_goals_bonus: 0,
+      red_card_bonus: 0,
+      weeks_played: 0,
+    });
 
     const totals = new Map<string, LeaderboardRow>();
+    for (const member of members ?? []) {
+      totals.set(member.user_id, emptyRow(member.user_id));
+    }
+
     for (const score of scores ?? []) {
-      const row = totals.get(score.user_id) ?? {
-        user_id: score.user_id,
-        friends_group_id: friendsGroupId,
-        points: 0,
-        fixtures_predicted: 0,
-        exact_score_points: 0,
-        correct_result_points: 0,
-        total_goals_bonus: 0,
-        red_card_bonus: 0,
-        weeks_played: 0,
-      };
+      const row = totals.get(score.user_id) ?? emptyRow(score.user_id);
 
       row.points += score.points_earned;
       row.fixtures_predicted += score.fixtures_predicted;

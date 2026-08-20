@@ -6,7 +6,7 @@ type JoinRequestUpdate =
   Database["public"]["Tables"]["friends_group_join_requests"]["Update"];
 type FriendsGroupJoinRequestRepositories = Pick<
   Repositories,
-  "friendsGroupJoinRequests"
+  "friendsGroupJoinRequests" | "friendsGroupUsers"
 >;
 
 export default class FriendsGroupJoinRequestService {
@@ -43,6 +43,17 @@ export default class FriendsGroupJoinRequestService {
 
   async getPendingRequest(leagueId: string) {
     return this.repositories.friendsGroupJoinRequests.listPending(leagueId);
+  }
+
+  async getAllPendingRequestsForOwner(userId: string) {
+    const ownedGroupIds =
+      await this.repositories.friendsGroupUsers.listOwnedGroupIdsForUser(userId);
+
+    if (!ownedGroupIds.length) return [];
+
+    return this.repositories.friendsGroupJoinRequests.listPendingForGroups(
+      ownedGroupIds
+    );
   }
 
   async updateRequest(payload: { requestId: string; data: JoinRequestUpdate }) {

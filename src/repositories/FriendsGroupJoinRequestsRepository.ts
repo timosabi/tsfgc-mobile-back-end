@@ -81,6 +81,23 @@ export default class FriendsGroupJoinRequestsRepository extends BaseRepository<"
     return (data ?? []) as TableRow<"friends_group_join_requests">[];
   }
 
+  async listPendingForGroups(
+    friendsGroupIds: string[]
+  ): Promise<Array<TableRow<"friends_group_join_requests"> & { friends_groups: { name: string; slug: string } | null }>> {
+    if (!friendsGroupIds.length) return [];
+
+    const { data, error } = await this.table()
+      .select("*, friends_groups(name, slug)")
+      .in("friends_group_id", friendsGroupIds)
+      .eq("status", "pending")
+      .order("requested_at", { ascending: true });
+
+    this.throwOnError(error, "friends_group_join_requests listPendingForGroups failed");
+    return (data ?? []) as Array<
+      TableRow<"friends_group_join_requests"> & { friends_groups: { name: string; slug: string } | null }
+    >;
+  }
+
   async updateRequest(payload: {
     requestId: string;
     data: TableUpdate<"friends_group_join_requests">;

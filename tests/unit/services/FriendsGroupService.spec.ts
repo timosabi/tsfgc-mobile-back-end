@@ -12,14 +12,12 @@ function createService() {
         Repositories["friendsGroups"],
         | "createFriendsGroup"
         | "findByInviteToken"
-        | "findOwnedByUser"
         | "findById"
         | "slugMatches"
       >
     >([
       "createFriendsGroup",
       "findByInviteToken",
-      "findOwnedByUser",
       "findById",
       "slugMatches",
     ]),
@@ -51,18 +49,10 @@ describe("FriendsGroupService", () => {
       .toMatchObject({ slug: "los-muchachos" });
   });
 
-  it("reads owner and slug availability through repositories", async () => {
+  it("reads slug availability through repositories", async () => {
     const { repositories, service } = createService();
-    repositories.friendsGroups.findOwnedByUser.mockResolvedValue({
-      id: "group-1",
-      name: "Los Muchachos",
-      slug: "los-muchachos",
-    });
     repositories.friendsGroups.slugMatches.mockResolvedValue([{ id: "group-1" }]);
 
-    await expect(service.getOwnedFriendsGroup("user-a")).resolves.toMatchObject({
-      id: "group-1",
-    });
     await expect(service.isSlugAvailable("los-muchachos")).resolves.toBe(false);
 
     repositories.friendsGroups.slugMatches.mockResolvedValue([]);

@@ -23,10 +23,6 @@ export default class FriendsGroupService {
     return this.repositories.friendsGroups.findById(friendsGroupId);
   }
 
-  async getOwnedFriendsGroup(userId: string): Promise<Pick<FriendsGroupRow, "id" | "name" | "slug"> | null> {
-    return this.repositories.friendsGroups.findOwnedByUser(userId);
-  }
-
   async getFriendsGroupByInviteToken(inviteToken: string): Promise<FriendsGroupRow | null> {
     return this.repositories.friendsGroups.findByInviteToken(inviteToken);
   }
@@ -38,6 +34,18 @@ export default class FriendsGroupService {
 
   async createFriendsGroup(payload: FriendsGroupInsert) {
     return this.repositories.friendsGroups.createFriendsGroup(payload);
+  }
+
+  async listAllGroupsForAdmin() {
+    const groups = await this.repositories.friendsGroups.listAllApproved();
+
+    return groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      slug: group.slug,
+      accessType: group.is_open ? "open" : "private",
+      invite_token: group.invite_token,
+    }));
   }
 }
 
