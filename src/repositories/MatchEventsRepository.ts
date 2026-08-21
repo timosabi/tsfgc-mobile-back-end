@@ -49,6 +49,18 @@ export default class MatchEventsRepository extends BaseRepository<"match_events"
     return (data ?? []) as Array<Pick<TableRow<"match_events">, "id">>;
   }
 
+  async findBySmEventId(
+    smEventId: number
+  ): Promise<Pick<TableRow<"match_events">, "id"> | null> {
+    const { data, error } = await this.table()
+      .select("id")
+      .eq("sm_event_id", smEventId)
+      .maybeSingle();
+
+    this.throwOnError(error, "match_events findBySmEventId failed");
+    return (data ?? null) as Pick<TableRow<"match_events">, "id"> | null;
+  }
+
   async upsertProviderEvent(
     row: TableInsert<"match_events">,
     hasSportMonksEventId: boolean

@@ -19,8 +19,8 @@ function createService() {
       Pick<Repositories["liveFeedEvents"], "listFeed" | "upsertFeedEvent">
     >(["listFeed", "upsertFeedEvent"]),
     matchEvents: createRepositoryMock<
-      Pick<Repositories["matchEvents"], "upsertProviderEvent">
-    >(["upsertProviderEvent"]),
+      Pick<Repositories["matchEvents"], "upsertProviderEvent" | "findBySmEventId">
+    >(["upsertProviderEvent", "findBySmEventId"]),
     predictions: createRepositoryMock<
       Pick<Repositories["predictions"], "listScorePredictionsByGroupFixture">
     >(["listScorePredictionsByGroupFixture"]),
@@ -140,6 +140,62 @@ describe("LiveFeedService", () => {
     );
   });
 
+  it("uses the explicit before-score for prediction diffing, not the fixture's already-live score", async () => {
+    const { repositories, service } = createService();
+    // Simulates the real poller: getLiveFixtures() has already patched the fixture
+    // row to the post-goal score before processEvent runs, so the fixture's own
+    // live_home_score/live_away_score can't be trusted as "before this goal".
+    repositories.fixtures.findLiveFeedFixture.mockResolvedValue(
+      liveFixture({ live_home_score: 1, live_away_score: 0 }),
+    );
+
+    await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 27,
+      homeScore: 1,
+      awayScore: 0,
+      beforeHomeScore: 0,
+      beforeAwayScore: 0,
+    });
+
+    expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          affectedPositive: ["Alex"],
+          affectedNegative: ["Bianca"],
+        }),
+      }),
+    );
+  });
+
+  it("skips already-processed events before generating or fanning out to groups", async () => {
+    const { chatGenerator, repositories, service } = createService();
+    repositories.matchEvents.findBySmEventId.mockResolvedValue({ id: "evt-1" });
+
+    const result = await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 27,
+      homeScore: 1,
+      awayScore: 0,
+    });
+
+    expect(result).toEqual({
+      created: 0,
+      skipped: true,
+      reason: "already_processed",
+    });
+    expect(repositories.fixtures.findLiveFeedFixture).not.toHaveBeenCalled();
+    expect(repositories.matchEvents.upsertProviderEvent).not.toHaveBeenCalled();
+    expect(chatGenerator.generate).not.toHaveBeenCalled();
+    expect(repositories.liveFeedEvents.upsertFeedEvent).not.toHaveBeenCalled();
+  });
+
   it("skips unsupported events before writing", async () => {
     const { repositories, service } = createService();
 
@@ -154,7 +210,9 @@ describe("LiveFeedService", () => {
   });
 });
 
-function liveFixture(): LiveFeedFixtureRow {
+function liveFixture(
+  overrides: Partial<LiveFeedFixtureRow> = {},
+): LiveFeedFixtureRow {
   return {
     id: 101,
     sm_fixture_id: 1101,
@@ -168,5 +226,6 @@ function liveFixture(): LiveFeedFixtureRow {
     live_away_score: 0,
     has_red_card: false,
     matchweek: "Matchweek 2",
+    ...overrides,
   };
 }

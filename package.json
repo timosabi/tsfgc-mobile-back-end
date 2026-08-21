@@ -35,6 +35,7 @@
     "db:types": "supabase gen types typescript --local > src/integrations/supabase/types.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.2",
     "@types/express-serve-static-core": "^5.0.7",

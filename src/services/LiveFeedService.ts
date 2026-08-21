@@ -17,6 +17,8 @@ type LiveEventInput = {
   playerName?: string | null;
   homeScore?: number | null;
   awayScore?: number | null;
+  beforeHomeScore?: number | null;
+  beforeAwayScore?: number | null;
   eventKey?: string;
   providerPayload?: Json | null;
 };
@@ -111,6 +113,15 @@ export default class LiveFeedService {
       return { created: 0, skipped: true, reason: "unsupported_event" };
     }
 
+    if (input.smEventId) {
+      const existing = await this.repositories.matchEvents.findBySmEventId(
+        input.smEventId
+      );
+      if (existing) {
+        return { created: 0, skipped: true, reason: "already_processed" };
+      }
+    }
+
     const fixture = await this.getFixture(input);
     if (!fixture) return { created: 0, skipped: true, reason: "fixture_not_found" };
 
@@ -118,38 +129,38 @@ export default class LiveFeedService {
     await this.patchFixture(input, fixture);
 
     const groups = await this.getSubscribedGroups(fixture);
-    const rows: LiveFeedRow[] = [];
 
-    for (const group of groups) {
-      const context = await this.buildGroupContext(input, fixture, group);
-      const aiMessage = await this.chatGenerator.generate(context);
-      const eventKey = this.eventKey(input);
+    const rows = await Promise.all(
+      groups.map(async (group) => {
+        const context = await this.buildGroupContext(input, fixture, group);
+        const aiMessage = await this.chatGenerator.generate(context);
+        const eventKey = this.eventKey(input);
 
-      const payload = {
-        ...context,
-        smEventId: input.smEventId ?? null,
-        event: {
-          type: input.eventType,
-          minute: input.minute ?? null,
-          team: input.team ?? null,
-          playerName: input.playerName ?? null,
-          homeScore: input.homeScore ?? null,
-          awayScore: input.awayScore ?? null,
-        },
-      };
+        const payload = {
+          ...context,
+          smEventId: input.smEventId ?? null,
+          event: {
+            type: input.eventType,
+            minute: input.minute ?? null,
+            team: input.team ?? null,
+            playerName: input.playerName ?? null,
+            homeScore: input.homeScore ?? null,
+            awayScore: input.awayScore ?? null,
+          },
+        };
 
-      const data = await this.repositories.liveFeedEvents.upsertFeedEvent({
-            friends_group_id: group.id,
-            fixture_id: fixture.id,
-            matchweek: fixture.matchweek,
-            sm_fixture_id: fixture.sm_fixture_id,
-            event_key: eventKey,
-            event_type: input.eventType,
-            payload: payload as Json,
-            ai_message: aiMessage,
-      });
-      rows.push(data);
-    }
+        return this.repositories.liveFeedEvents.upsertFeedEvent({
+          friends_group_id: group.id,
+          fixture_id: fixture.id,
+          matchweek: fixture.matchweek,
+          sm_fixture_id: fixture.sm_fixture_id,
+          event_key: eventKey,
+          event_type: input.eventType,
+          payload: payload as Json,
+          ai_message: aiMessage,
+        });
+      })
+    );
 
     return { created: rows.length, rows };
   }
@@ -235,8 +246,10 @@ export default class LiveFeedService {
       fixture.id,
       submittedUserIds
     );
-    const beforeHome = fixture.live_home_score ?? fixture.home_score ?? 0;
-    const beforeAway = fixture.live_away_score ?? fixture.away_score ?? 0;
+    const beforeHome =
+      input.beforeHomeScore ?? fixture.live_home_score ?? fixture.home_score ?? 0;
+    const beforeAway =
+      input.beforeAwayScore ?? fixture.live_away_score ?? fixture.away_score ?? 0;
     const afterHome = input.homeScore ?? beforeHome;
     const afterAway = input.awayScore ?? beforeAway;
     const positive = new Set<string>();

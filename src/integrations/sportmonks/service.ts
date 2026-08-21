@@ -340,7 +340,7 @@ export class SportMonksService {
     try {
       const response = await this.client.getLiveFixtures({
         leagueIds,
-        includes: ["participants", "scores", "state", "round", "events"],
+        includes: ["participants", "scores", "periods", "state", "round", "events"],
       });
 
       const transformedFixtures = SportMonksTransformer.transformFixtures(
@@ -401,25 +401,22 @@ export class SportMonksService {
     events?: MatchEventInsert[];
   }> {
     try {
-      const [fixtureResponse, eventsResponse] = await Promise.all([
-        this.client.getFixtureById(fixtureId, [
-          "participants",
-          "scores",
-          "periods",
-          "state",
-          "round",
-        ]),
-        includeEvents ? this.client.getFixtureEvents(fixtureId) : null,
-      ]);
+      const includes = ["participants", "scores", "periods", "state", "round"];
+      if (includeEvents) includes.push("events");
+
+      const fixtureResponse = await this.client.getFixtureById(
+        fixtureId,
+        includes
+      );
 
       const fixture = SportMonksTransformer.transformFixture(
         fixtureResponse.data
       );
 
       let events: MatchEventInsert[] | undefined;
-      if (eventsResponse && fixtureResponse.data.participants) {
+      if (includeEvents && fixtureResponse.data.participants) {
         events = SportMonksTransformer.transformMatchEvents(
-          eventsResponse.data,
+          fixtureResponse.data.events ?? [],
           fixtureResponse.data.participants
         );
       }
