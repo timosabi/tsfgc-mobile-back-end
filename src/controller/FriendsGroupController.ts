@@ -141,14 +141,14 @@ export default class FriendsGroupController {
 
   private catalogLeagueIds() {
     const raw = process.env.SPORTMONKS_CATALOG_LEAGUE_IDS;
-    if (!raw) return [501, 271];
+    if (!raw) return [8, 501];
 
     const parsed = raw
       .split(",")
       .map((value) => Number(value.trim()))
       .filter((value) => Number.isFinite(value) && value > 0);
 
-    return parsed.length > 0 ? parsed : [501, 271];
+    return parsed.length > 0 ? parsed : [8, 501];
   }
 
   private async syncCompetitionCatalog(
@@ -194,8 +194,8 @@ export default class FriendsGroupController {
 
     const { sportMonks } = createSportMonksServices(client);
     const countryByLeague = new Map([
+      [8, "England"],
       [501, "Scotland"],
-      [271, "Denmark"],
     ]);
     const entries = [];
 
