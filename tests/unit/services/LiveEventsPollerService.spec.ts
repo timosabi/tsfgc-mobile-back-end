@@ -172,8 +172,11 @@ describe("LiveEventsPollerService", () => {
 
   it("fires the minute-85 synthetic trigger once, not on every poll", async () => {
     const deps = createDeps();
-    deps.live.getLiveFixtures.mockResolvedValue([liveFixture({ current_minute: 86 })]);
-    deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: { sm_fixture_id: 1101, current_minute: 86 },
+      events: [],
+    });
 
     const poller = createPoller(deps);
     await poller.poll();
@@ -190,10 +193,14 @@ describe("LiveEventsPollerService", () => {
 
   it("fires the halftime synthetic trigger only when provider state is HT", async () => {
     const deps = createDeps();
-    deps.live.getLiveFixtures.mockResolvedValue([
-      liveFixture({ provider_payload: { state: { developer_name: "HT" } } }),
-    ]);
-    deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {
+        sm_fixture_id: 1101,
+        provider_payload: { state: { developer_name: "HT" } },
+      },
+      events: [],
+    });
 
     const poller = createPoller(deps);
     await poller.poll();
@@ -202,6 +209,32 @@ describe("LiveEventsPollerService", () => {
       ([input]) => input.eventType === "halftime"
     );
     expect(halftimeCalls).toHaveLength(1);
+  });
+
+  it("ignores a stale HT snapshot from the live list once fresh data says otherwise", async () => {
+    const deps = createDeps();
+    // patchLiveRows() never updates provider_payload, so the live-list snapshot
+    // can be arbitrarily stale (e.g. still reading "HT" from an earlier tick,
+    // or the last full hydration). Halftime detection must use the fresh
+    // per-tick fetch, not this stale one, or it would fire forever.
+    deps.live.getLiveFixtures.mockResolvedValue([
+      liveFixture({ provider_payload: { state: { developer_name: "HT" } } }),
+    ]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {
+        sm_fixture_id: 1101,
+        provider_payload: { state: { developer_name: "2ND_HALF" } },
+      },
+      events: [],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+
+    const halftimeCalls = deps.liveFeed.processEvent.mock.calls.filter(
+      ([input]) => input.eventType === "halftime"
+    );
+    expect(halftimeCalls).toHaveLength(0);
   });
 
   it("fast-finalizes a fixture that drops out of the live list", async () => {

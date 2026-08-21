@@ -4,8 +4,13 @@ import type SportMonksService from "../integrations/sportmonks/service.js";
 import type WeeklyScoreService from "./WeeklyScoreService.js";
 import type LiveFeedService from "./LiveFeedService.js";
 import type { Database } from "../integrations/supabase/types.js";
+import type { FixtureInsert } from "./dto/types.js";
 
 type FixtureRow = Database["public"]["Tables"]["fixtures"]["Row"];
+type FreshFixtureState = Pick<
+  FixtureInsert,
+  "sm_fixture_id" | "current_minute" | "provider_payload"
+>;
 
 const GOAL_EVENT_TYPES = new Set(["goal", "own_goal", "penalty_goal"]);
 const HALFTIME_KEY_OFFSET = 901;
@@ -60,10 +65,8 @@ export default class LiveEventsPollerService {
     const homeScore = fixture.live_home_score ?? fixture.home_score;
     const awayScore = fixture.live_away_score ?? fixture.away_score;
 
-    const { events } = await this.deps.sportMonks.getFixtureById(
-      fixture.sm_fixture_id,
-      true
-    );
+    const { fixture: freshFixture, events } =
+      await this.deps.sportMonks.getFixtureById(fixture.sm_fixture_id, true);
 
     // Replay goals in chronological order every tick so each one gets an accurate
     // before/after score for prediction-impact diffing. `fixture.live_home_score`
@@ -118,7 +121,7 @@ export default class LiveEventsPollerService {
       });
     }
 
-    await this.processSyntheticEvents(fixture, homeScore, awayScore);
+    await this.processSyntheticEvents(freshFixture, homeScore, awayScore);
   }
 
   private goalCreditedToHome(
@@ -131,7 +134,7 @@ export default class LiveEventsPollerService {
   }
 
   private async processSyntheticEvents(
-    fixture: FixtureRow,
+    fixture: FreshFixtureState,
     homeScore: number | null,
     awayScore: number | null
   ): Promise<void> {
@@ -157,7 +160,7 @@ export default class LiveEventsPollerService {
   }
 
   private async fireSynthetic(
-    fixture: FixtureRow,
+    fixture: FreshFixtureState,
     eventType: "halftime" | "minute_85",
     keyOffset: number,
     homeScore: number | null,
@@ -188,7 +191,7 @@ export default class LiveEventsPollerService {
     return null;
   }
 
-  private isHalftime(fixture: FixtureRow): boolean {
+  private isHalftime(fixture: FreshFixtureState): boolean {
     const payload = fixture.provider_payload as {
       state?: { developer_name?: string };
     } | null;
