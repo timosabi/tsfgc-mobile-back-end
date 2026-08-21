@@ -181,7 +181,7 @@ describe("FriendsGroupUsersService", () => {
             matchweek: "Matchweek 12",
             weekNumber: 12,
             state: "upcoming",
-            displayLabel: "Premiership week 12",
+            displayLabel: "Matchweek 12",
           },
         }),
       }),

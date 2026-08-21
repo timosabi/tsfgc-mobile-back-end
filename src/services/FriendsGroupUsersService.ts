@@ -152,10 +152,7 @@ export default class FriendsGroupUsersService {
           }),
         ]);
         const currentMatchweek = subscription
-          ? this.buildCurrentMatchweekCard({
-              fixtures,
-              leagueName: league?.name ?? null,
-            })
+          ? this.buildCurrentMatchweekCard({ fixtures })
           : null;
 
         return {
@@ -372,21 +369,17 @@ export default class FriendsGroupUsersService {
 
   private buildCurrentMatchweekCard(params: {
     fixtures: OverviewFixtureRow[];
-    leagueName: string | null;
   }): GroupCardMatchweek | null {
     const selected = this.pickCurrentMatchweek(params.fixtures);
     if (!selected) return null;
 
     const weekNumber = this.weekNumberFromMatchweek(selected.matchweek);
-    const leagueName = params.leagueName ?? "League";
     return {
       matchweek: selected.matchweek,
       weekNumber,
       state: selected.state,
       displayLabel:
-        weekNumber === null
-          ? `${leagueName} ${selected.matchweek}`
-          : `${leagueName} week ${weekNumber}`,
+        weekNumber === null ? selected.matchweek : `Matchweek ${weekNumber}`,
     };
   }
 
