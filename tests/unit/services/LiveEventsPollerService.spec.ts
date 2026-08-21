@@ -145,6 +145,70 @@ describe("LiveEventsPollerService", () => {
     );
   });
 
+  it("flags own goals and penalties, and passes the assisting player through", async () => {
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {},
+      events: [
+        {
+          event_type: "penalty_goal",
+          sm_event_id: 1,
+          minute: 10,
+          player_name: "Kane",
+          team: "Arsenal",
+          assist_player: null,
+        },
+        {
+          event_type: "own_goal",
+          sm_event_id: 2,
+          minute: 20,
+          player_name: "Defender",
+          team: "Chelsea",
+          assist_player: null,
+        },
+        {
+          event_type: "goal",
+          sm_event_id: 3,
+          minute: 30,
+          player_name: "Saka",
+          team: "Arsenal",
+          assist_player: "Odegaard",
+        },
+      ],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+
+    const calls = deps.liveFeed.processEvent.mock.calls.map(([input]) => input);
+
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        smEventId: 1,
+        isPenalty: true,
+        isOwnGoal: false,
+        assistedBy: null,
+      })
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        smEventId: 2,
+        isPenalty: false,
+        isOwnGoal: true,
+        assistedBy: null,
+      })
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        smEventId: 3,
+        isPenalty: false,
+        isOwnGoal: false,
+        assistedBy: "Odegaard",
+      })
+    );
+  });
+
   it("normalizes own_goal/penalty_goal to goal and drops unsupported event types", async () => {
     const deps = createDeps();
     deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);

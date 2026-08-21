@@ -82,3 +82,71 @@ describe("ClaudeLiveChatGenerator", () => {
     expect(result).toEqual(await fallback.generate(context()));
   });
 });
+
+describe("MockLiveChatGenerator", () => {
+  it("names the scorer when player is present", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      affectedPositive: [],
+      affectedNegative: [],
+      player: "Saka",
+    });
+
+    expect(message).toContain("Saka scores");
+  });
+
+  it("calls out a penalty explicitly", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      player: "Kane",
+      isPenalty: true,
+    });
+
+    expect(message).toContain("Kane slots the penalty");
+  });
+
+  it("calls out an own goal explicitly", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      player: "Gabriel",
+      isOwnGoal: true,
+    });
+
+    expect(message).toContain("Gabriel turns it into his own net");
+  });
+
+  it("mentions the assist when present on a normal goal", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      affectedPositive: [],
+      affectedNegative: [],
+      player: "Saka",
+      assistedBy: "Odegaard",
+    });
+
+    expect(message).toContain("Saka scores (assist: Odegaard)");
+  });
+
+  it("falls back to a generic goal message when no player is given", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      affectedPositive: [],
+      affectedNegative: [],
+      player: null,
+    });
+
+    expect(message).toContain("Goal for Arsenal vs Chelsea");
+  });
+
+  it("mentions who was carded on a red card", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      eventType: "red_card",
+      affectedPositive: [],
+      affectedNegative: [],
+      player: "Rice",
+    });
+
+    expect(message).toContain("Rice sees red");
+  });
+});

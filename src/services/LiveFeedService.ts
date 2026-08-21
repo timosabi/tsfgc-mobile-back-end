@@ -15,6 +15,9 @@ type LiveEventInput = {
   minute?: number | null;
   team?: string | null;
   playerName?: string | null;
+  assistedBy?: string | null;
+  isPenalty?: boolean;
+  isOwnGoal?: boolean;
   homeScore?: number | null;
   awayScore?: number | null;
   beforeHomeScore?: number | null;
@@ -144,6 +147,9 @@ export default class LiveFeedService {
             minute: input.minute ?? null,
             team: input.team ?? null,
             playerName: input.playerName ?? null,
+            assistedBy: input.assistedBy ?? null,
+            isPenalty: Boolean(input.isPenalty),
+            isOwnGoal: Boolean(input.isOwnGoal),
             homeScore: input.homeScore ?? null,
             awayScore: input.awayScore ?? null,
           },
@@ -200,6 +206,13 @@ export default class LiveFeedService {
     const submittedUserIds = await this.getSubmittedUserIds(group.id, fixture);
     const profileById = await this.getProfiles(submittedUserIds);
     const fixtureName = `${fixture.home_team} vs ${fixture.away_team}`;
+    const eventDetail = {
+      player: input.playerName ?? null,
+      assistedBy: input.assistedBy ?? null,
+      team: input.team ?? null,
+      isPenalty: Boolean(input.isPenalty),
+      isOwnGoal: Boolean(input.isOwnGoal),
+    };
 
     if (!submittedUserIds.length) {
       return {
@@ -212,6 +225,7 @@ export default class LiveFeedService {
           home: input.homeScore ?? fixture.live_home_score ?? fixture.home_score,
           away: input.awayScore ?? fixture.live_away_score ?? fixture.away_score,
         },
+        ...eventDetail,
         affectedPositive: [],
         affectedNegative: [],
         reason: "no_submitted_predictions",
@@ -231,6 +245,7 @@ export default class LiveFeedService {
         fixtureName,
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
+        ...eventDetail,
         affectedPositive: submittedUserIds
           .filter((userId) => yes.has(userId))
           .map((userId) => profileById.get(userId) ?? "Player"),
@@ -293,6 +308,7 @@ export default class LiveFeedService {
       matchweek: fixture.matchweek,
       minute: input.minute ?? null,
       score: { home: afterHome, away: afterAway },
+      ...eventDetail,
       affectedPositive: Array.from(positive).map(
         (userId) => profileById.get(userId) ?? "Player"
       ),

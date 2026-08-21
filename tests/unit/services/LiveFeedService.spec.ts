@@ -171,6 +171,35 @@ describe("LiveFeedService", () => {
     );
   });
 
+  it("passes scorer, assist, and penalty/own-goal detail through to the chat generator", async () => {
+    const { chatGenerator, service } = createService();
+
+    await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 27,
+      team: "Arsenal",
+      playerName: "Kane",
+      assistedBy: "Saka",
+      isPenalty: true,
+      isOwnGoal: false,
+      homeScore: 1,
+      awayScore: 0,
+    });
+
+    expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        player: "Kane",
+        assistedBy: "Saka",
+        team: "Arsenal",
+        isPenalty: true,
+        isOwnGoal: false,
+      })
+    );
+  });
+
   it("skips already-processed events before generating or fanning out to groups", async () => {
     const { chatGenerator, repositories, service } = createService();
     repositories.matchEvents.findBySmEventId.mockResolvedValue({ id: "evt-1" });
