@@ -526,7 +526,8 @@ export default class FixturesRepository extends BaseRepository<"fixtures"> {
       .eq("sm_league_id", params.providerLeagueId)
       .not("matchweek", "is", null)
       .order("match_date", { ascending: true })
-      .order("match_time", { ascending: true });
+      .order("match_time", { ascending: true })
+      .order("home_team", { ascending: true });
 
     if (params.providerSeasonId) {
       query = query.eq("sm_season_id", params.providerSeasonId);
