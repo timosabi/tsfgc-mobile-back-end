@@ -139,7 +139,11 @@ describe("MatchweekOverviewService", () => {
     expect(overview.scores.rows.find((row) => row.user_id === "user-a"))
       .toMatchObject({
       user_id: "user-a",
-      points_earned: 5,
+      // total_goals_bonus is still computed (proven below) but intentionally withheld
+      // from the provisional total until the matchweek finishes — see
+      // MatchweekOverviewService.calculateProvisionalScores.
+      total_goals_bonus: 2,
+      points_earned: 3,
       provisional: true,
     });
     expect(overview.scores.rows[0]).not.toHaveProperty("friends_group_id");

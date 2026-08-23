@@ -496,11 +496,13 @@ export default class MatchweekOverviewService {
     }
 
     for (const row of rowsByUser.values()) {
+      // total_goals_bonus is left out of the provisional total on purpose: "closest
+      // total" can only be determined once every fixture in the matchweek has a final
+      // score, so crediting it mid-week would make the running total swing as the
+      // standings shift. It's still awarded normally once WeeklyScoreService finalizes
+      // the matchweek (see calculateAllFinished).
       row.points_earned =
-        row.exact_score_points +
-        row.correct_result_points +
-        row.total_goals_bonus +
-        row.red_card_bonus;
+        row.exact_score_points + row.correct_result_points + row.red_card_bonus;
       row.group_points = row.points_earned;
     }
 
