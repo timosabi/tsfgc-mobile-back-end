@@ -134,7 +134,7 @@ describe("WeeklyScoreService", () => {
     );
   });
 
-  it("ranks season leaderboard by points then exact scores then correct results", async () => {
+  it("orders season leaderboard by points then exact scores then correct results, tying rank on equal points", async () => {
     const { repositories, service } = createService();
 
     repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([
@@ -174,10 +174,15 @@ describe("WeeklyScoreService", () => {
 
     const leaderboard = await service.getLeaderboard("group-1");
 
-    expect(leaderboard.map((row) => [row.user_id, row.rank, row.points])).toEqual([
-      ["user-b", 1, 4],
-      ["user-a", 2, 4],
-      ["user-c", 3, 3],
+    // user-a and user-b are tied on points (4), so they share rank 1 (standard
+    // competition ranking) and the next distinct rank skips to 3; display order
+    // among tied rows still falls back to exact_score_points then correct_result_points.
+    expect(
+      leaderboard.map((row) => [row.user_id, row.rank, row.rank_display, row.points])
+    ).toEqual([
+      ["user-b", 1, "#1", 4],
+      ["user-a", 1, "=1", 4],
+      ["user-c", 3, "#3", 3],
     ]);
     expect(leaderboard[0].profile?.display_name).toBe("Bianca");
   });

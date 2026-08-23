@@ -29,6 +29,7 @@ type LeaderboardRow = {
   red_card_bonus: number;
   weeks_played: number;
   rank?: number;
+  rank_display?: string;
 };
 type CalculatedWeeklyScore = WeeklyScoreInsert & {
   fixtures_predicted: number;
@@ -308,7 +309,10 @@ export default class WeeklyScoreService {
     });
 
     rows.forEach((row, index) => {
-      row.rank = index + 1;
+      const previous = rows[index - 1];
+      const tiedWithPrevious = previous ? previous.points === row.points : false;
+      row.rank = tiedWithPrevious ? previous!.rank : index + 1;
+      row.rank_display = `${tiedWithPrevious ? "=" : "#"}${row.rank}`;
     });
 
     if (!rows.length) return [];
