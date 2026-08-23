@@ -543,9 +543,8 @@ export default class FixturesRepository extends BaseRepository<"fixtures"> {
     providerSeasonId?: number | null;
   }): Promise<string[]> {
     let query = this.table()
-      .select("matchweek")
+      .select("matchweek, status")
       .eq("sm_league_id", params.providerLeagueId)
-      .eq("status", "finished")
       .not("matchweek", "is", null);
 
     if (params.providerSeasonId) {
@@ -554,12 +553,23 @@ export default class FixturesRepository extends BaseRepository<"fixtures"> {
 
     const { data, error } = await query;
     this.throwOnError(error, "fixtures listFinishedMatchweeks failed");
-    return Array.from(
-      new Set(
-        ((data ?? []) as Array<Pick<TableRow<"fixtures">, "matchweek">>)
-          .map((fixture) => fixture.matchweek)
-          .filter((matchweek): matchweek is string => Boolean(matchweek))
-      )
-    );
+
+    // A matchweek only counts once EVERY fixture in it has finished -- not just
+    // one. Bonus categories that depend on the whole week's final total (e.g.
+    // total_goals_bonus) would otherwise get computed and persisted from a
+    // partial, still-changing subset of fixtures.
+    const statusesByMatchweek = new Map<string, string[]>();
+    for (const fixture of (data ?? []) as Array<
+      Pick<TableRow<"fixtures">, "matchweek" | "status">
+    >) {
+      if (!fixture.matchweek) continue;
+      const statuses = statusesByMatchweek.get(fixture.matchweek) ?? [];
+      statuses.push(fixture.status ?? "");
+      statusesByMatchweek.set(fixture.matchweek, statuses);
+    }
+
+    return Array.from(statusesByMatchweek.entries())
+      .filter(([, statuses]) => statuses.every((status) => status === "finished"))
+      .map(([matchweek]) => matchweek);
   }
 }
