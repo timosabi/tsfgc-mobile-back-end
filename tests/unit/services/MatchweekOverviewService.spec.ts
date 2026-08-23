@@ -13,8 +13,8 @@ type LiveFeedRow = Database["public"]["Tables"]["live_feed_events"]["Row"];
 function createService(fixtures: OverviewFixtureRow[]) {
   const repositories = {
     fixtures: createRepositoryMock<
-      Pick<Repositories["fixtures"], "listOverviewFixturesForSubscription">
-    >(["listOverviewFixturesForSubscription"]),
+      Pick<Repositories["fixtures"], "listOverviewFixturesForSubscription" | "listOpenMatchweeks">
+    >(["listOverviewFixturesForSubscription", "listOpenMatchweeks"]),
     friendsGroups: createRepositoryMock<
       Pick<Repositories["friendsGroups"], "findOverviewById">
     >(["findOverviewById"]),
@@ -58,6 +58,11 @@ function createService(fixtures: OverviewFixtureRow[]) {
     provider_season_id: 23614,
   });
   repositories.fixtures.listOverviewFixturesForSubscription.mockResolvedValue(fixtures);
+  repositories.fixtures.listOpenMatchweeks.mockResolvedValue([
+    "Matchweek 1",
+    "Matchweek 2",
+    "Matchweek 3",
+  ]);
   repositories.friendsGroupUsers.listMembers.mockResolvedValue([
     { user_id: "user-a", role: "owner", joined_at: "2026-08-01T10:00:00Z" },
     { user_id: "user-b", role: "member", joined_at: "2026-08-01T10:01:00Z" },
@@ -214,6 +219,29 @@ describe("MatchweekOverviewService", () => {
     expect(overview.scores.rows[0]).not.toHaveProperty("group_points");
     expect(overview).not.toHaveProperty("leaderboard");
     expect(overview.members.every((member) => member.prediction !== null)).toBe(true);
+  });
+
+  it("exposes openMatchweeks on navigation and blocks a matchweek that isn't open yet", async () => {
+    const { repositories, service } = createService([
+      overviewFixture(201, "Matchweek 1", "scheduled", "2099-08-08T12:00:00Z"),
+      overviewFixture(301, "Matchweek 2", "scheduled", "2099-08-15T12:00:00Z"),
+    ]);
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 1"]);
+
+    const overview = await service.getOverview({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 1",
+    });
+    expect(overview.navigation.openMatchweeks).toEqual(["Matchweek 1"]);
+
+    await expect(
+      service.getOverview({
+        userId: "user-a",
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 });
 

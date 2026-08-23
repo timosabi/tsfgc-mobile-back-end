@@ -572,4 +572,57 @@ export default class FixturesRepository extends BaseRepository<"fixtures"> {
       .filter(([, statuses]) => statuses.every((status) => status === "finished"))
       .map(([matchweek]) => matchweek);
   }
+
+  async listOpenMatchweeks(params: {
+    providerLeagueId: number;
+    providerSeasonId?: number | null;
+  }): Promise<string[]> {
+    let query = this.table()
+      .select("matchweek, status")
+      .eq("sm_league_id", params.providerLeagueId)
+      .not("matchweek", "is", null);
+
+    if (params.providerSeasonId) {
+      query = query.eq("sm_season_id", params.providerSeasonId);
+    }
+
+    const { data, error } = await query;
+    this.throwOnError(error, "fixtures listOpenMatchweeks failed");
+
+    const statusesByMatchweek = new Map<string, string[]>();
+    for (const fixture of (data ?? []) as Array<
+      Pick<TableRow<"fixtures">, "matchweek" | "status">
+    >) {
+      if (!fixture.matchweek) continue;
+      const statuses = statusesByMatchweek.get(fixture.matchweek) ?? [];
+      statuses.push(fixture.status ?? "");
+      statusesByMatchweek.set(fixture.matchweek, statuses);
+    }
+
+    // The earliest matchweek is always open; each later one only opens once its
+    // immediate predecessor has fully finished. Fixtures for a future matchweek
+    // can still be rescheduled, so predictions shouldn't open against a set of
+    // fixtures that might change.
+    const orderedMatchweeks = Array.from(statusesByMatchweek.keys()).sort(
+      (a, b) => matchweekNumber(a) - matchweekNumber(b)
+    );
+
+    const open: string[] = [];
+    orderedMatchweeks.forEach((matchweek, index) => {
+      if (index === 0) {
+        open.push(matchweek);
+        return;
+      }
+      const previousStatuses = statusesByMatchweek.get(orderedMatchweeks[index - 1]) ?? [];
+      const previousFinished = previousStatuses.every((status) => status === "finished");
+      if (previousFinished) open.push(matchweek);
+    });
+
+    return open;
+  }
+}
+
+function matchweekNumber(matchweek: string): number {
+  const n = Number(matchweek.match(/\d+/)?.[0]);
+  return Number.isInteger(n) && n > 0 ? n : 0;
 }

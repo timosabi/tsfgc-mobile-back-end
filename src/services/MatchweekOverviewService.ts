@@ -94,12 +94,19 @@ export default class MatchweekOverviewService {
     }
 
     const matchweeks = this.groupByMatchweek(allFixtures);
+    const openMatchweeks = await this.repositories.fixtures.listOpenMatchweeks({
+      providerLeagueId: subscription.provider_league_id,
+      providerSeasonId: subscription.provider_season_id,
+    });
     const selectedMatchweek =
       params.matchweek === "current"
         ? this.pickCurrentMatchweek(matchweeks)
         : params.matchweek;
     const fixtures = matchweeks.get(selectedMatchweek);
     if (!fixtures?.length) throw new AppError("No fixtures found for matchweek", 404);
+    if (params.matchweek !== "current" && !openMatchweeks.includes(selectedMatchweek)) {
+      throw new AppError("This matchweek isn't open yet", 403);
+    }
 
     const locksAt = this.matchweekLocksAt(fixtures);
     const state = this.getState(fixtures);
@@ -174,7 +181,7 @@ export default class MatchweekOverviewService {
       selectedMatchweek,
       locksAt,
       state,
-      navigation: this.buildNavigation(matchweeks, selectedMatchweek),
+      navigation: this.buildNavigation(matchweeks, selectedMatchweek, openMatchweeks),
       permissions: {
         canEditPredictions: state === "editable",
         canSubmitPredictions: state === "editable",
@@ -339,7 +346,11 @@ export default class MatchweekOverviewService {
     return entries.length ? entries[entries.length - 1][0] : "Matchweek 1";
   }
 
-  private buildNavigation(matchweeks: Map<string, FixtureRow[]>, selected: string) {
+  private buildNavigation(
+    matchweeks: Map<string, FixtureRow[]>,
+    selected: string,
+    openMatchweeks: string[]
+  ) {
     const keys = Array.from(matchweeks.keys());
     const index = keys.indexOf(selected);
     const current = this.pickCurrentMatchweek(matchweeks);
@@ -348,6 +359,7 @@ export default class MatchweekOverviewService {
       previous: index > 0 ? keys[index - 1] : null,
       next: index >= 0 && index < keys.length - 1 ? keys[index + 1] : null,
       available: keys,
+      openMatchweeks,
     };
   }
 

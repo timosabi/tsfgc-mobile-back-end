@@ -267,13 +267,22 @@ export default class PredictionSlipService {
       );
     if (!subscription) throw new AppError("Friends group has no active subscription", 400);
 
-    const fixtures = await this.repositories.fixtures.listMatchweekFixtures({
-      providerLeagueId: subscription.provider_league_id,
-      providerSeasonId: subscription.provider_season_id,
-      matchweek,
-    });
+    const [fixtures, openMatchweeks] = await Promise.all([
+      this.repositories.fixtures.listMatchweekFixtures({
+        providerLeagueId: subscription.provider_league_id,
+        providerSeasonId: subscription.provider_season_id,
+        matchweek,
+      }),
+      this.repositories.fixtures.listOpenMatchweeks({
+        providerLeagueId: subscription.provider_league_id,
+        providerSeasonId: subscription.provider_season_id,
+      }),
+    ]);
 
     if (!fixtures.length) throw new AppError("No fixtures found for matchweek", 404);
+    if (!openMatchweeks.includes(matchweek)) {
+      throw new AppError("This matchweek isn't open yet", 403);
+    }
     return fixtures;
   }
 

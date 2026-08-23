@@ -44,9 +44,9 @@ const lockedFixtures: MatchweekFixtureRow[] = futureFixtures.map((fixture) => ({
 
 function createService(fixtures = futureFixtures) {
   const repositories = {
-    fixtures: createRepositoryMock<Pick<Repositories["fixtures"], "listMatchweekFixtures">>([
-      "listMatchweekFixtures",
-    ]),
+    fixtures: createRepositoryMock<
+      Pick<Repositories["fixtures"], "listMatchweekFixtures" | "listOpenMatchweeks">
+    >(["listMatchweekFixtures", "listOpenMatchweeks"]),
     friendsGroupSubscriptions: createRepositoryMock<
       Pick<Repositories["friendsGroupSubscriptions"], "findActiveByFriendsGroup">
     >(["findActiveByFriendsGroup"]),
@@ -97,6 +97,7 @@ function createService(fixtures = futureFixtures) {
     provider_season_id: 23614,
   });
   repositories.fixtures.listMatchweekFixtures.mockResolvedValue(fixtures);
+  repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
   repositories.predictions.listByGroupFixturesUsers.mockResolvedValue([]);
   repositories.redCardPredictions.listByGroupFixturesUsers.mockResolvedValue([]);
   repositories.userSubmissions.findByUserGroupMatchweek.mockResolvedValue(null);
@@ -196,6 +197,28 @@ describe("PredictionSlipService", () => {
         },
       })
     ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(repositories.predictions.insertPredictions).not.toHaveBeenCalled();
+  });
+
+  it("blocks access to a matchweek that isn't open yet", async () => {
+    const { repositories, service } = createService();
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 1"]);
+
+    await expect(
+      service.saveMine({
+        userId: "user-a",
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+        payload: {
+          predictions: [
+            { fixtureId: 101, homeScore: 2, awayScore: 1 },
+            { fixtureId: 102, homeScore: 0, awayScore: 0 },
+          ],
+          redCardFixtureId: 101,
+        },
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
 
     expect(repositories.predictions.insertPredictions).not.toHaveBeenCalled();
   });
