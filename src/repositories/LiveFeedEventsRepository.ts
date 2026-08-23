@@ -32,7 +32,7 @@ export default class LiveFeedEventsRepository extends BaseRepository<"live_feed_
       .select("*")
       .eq("friends_group_id", friendsGroupId)
       .eq("matchweek", matchweek)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false });
 
     this.throwOnError(error, "live_feed_events listByGroupMatchweek failed");
     return (data ?? []) as TableRow<"live_feed_events">[];
