@@ -8,7 +8,7 @@ import { createRepositories, type Repositories } from "../repositories/index.js"
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
 
 type LiveEventInput = {
-  eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85";
+  eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85" | "fulltime";
   fixtureId?: number;
   smFixtureId?: number;
   smEventId?: number;
@@ -112,7 +112,11 @@ export default class LiveFeedService {
   }
 
   async processEvent(input: LiveEventInput): Promise<ProcessEventResult> {
-    if (!["goal", "red_card", "halftime", "penalty", "minute_85"].includes(input.eventType)) {
+    if (
+      !["goal", "red_card", "halftime", "penalty", "minute_85", "fulltime"].includes(
+        input.eventType
+      )
+    ) {
       return { created: 0, skipped: true, reason: "unsupported_event" };
     }
 

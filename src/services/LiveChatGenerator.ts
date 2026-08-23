@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export type LiveChatContext = {
   groupName: string;
-  eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85";
+  eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85" | "fulltime";
   fixtureName: string;
   matchweek?: string | null;
   minute: number | null;
@@ -69,6 +69,14 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
       return `${minute}Five-ish minutes left in ${context.fixtureName}. ${context.groupName}, this is where tables wobble.`;
     }
 
+    if (context.eventType === "fulltime") {
+      const score =
+        context.score?.home !== null && context.score?.away !== null
+          ? ` ${context.score?.home}-${context.score?.away}.`
+          : ".";
+      return `${minute}Full time in ${context.fixtureName}${score} ${context.groupName}, go check your points.`;
+    }
+
     if (winners && losers) {
       return `${minute}${goalClause}. ${winners} move closer, ${losers} watch a nice prediction wobble.`;
     }
@@ -108,7 +116,8 @@ Examples of the tone to match:
 "70' Saka scores! George suddenly looks like a football prophet."
 "81' Penalty converted by Kane, assisted by nobody but his own nerve. Alex's exact-score guess just died."
 "45' Own goal from Gabriel — brutal way to go 1-0 down. Someone's defence prediction just aged badly."
-"85' Five-ish minutes left in Thór vs Víkingur Reykjavík. Geo Iceland 2, this is where tables wobble."`;
+"85' Five-ish minutes left in Thór vs Víkingur Reykjavík. Geo Iceland 2, this is where tables wobble."
+"90' Full time in Arsenal vs Chelsea 2-1. Geo Iceland 2, go check your points."`;
 
 export class ClaudeLiveChatGenerator implements LiveChatGenerator {
   private readonly client: Anthropic | null;

@@ -15,6 +15,8 @@ type FreshFixtureState = Pick<
 const GOAL_EVENT_TYPES = new Set(["goal", "own_goal", "penalty_goal"]);
 const HALFTIME_KEY_OFFSET = 901;
 const MINUTE_85_KEY_OFFSET = 902;
+const FULLTIME_KEY_OFFSET = 903;
+const FULLTIME_STATES = new Set(["FT", "AET", "FT_PEN"]);
 
 export default class LiveEventsPollerService {
   private readonly previouslyLive = new Set<number>();
@@ -160,11 +162,21 @@ export default class LiveEventsPollerService {
         awayScore
       );
     }
+
+    if (this.isFulltime(fixture)) {
+      await this.fireSynthetic(
+        fixture,
+        "fulltime",
+        FULLTIME_KEY_OFFSET,
+        homeScore,
+        awayScore
+      );
+    }
   }
 
   private async fireSynthetic(
     fixture: FreshFixtureState,
-    eventType: "halftime" | "minute_85",
+    eventType: "halftime" | "minute_85" | "fulltime",
     keyOffset: number,
     homeScore: number | null,
     awayScore: number | null
@@ -199,5 +211,13 @@ export default class LiveEventsPollerService {
       state?: { developer_name?: string };
     } | null;
     return payload?.state?.developer_name === "HT";
+  }
+
+  private isFulltime(fixture: FreshFixtureState): boolean {
+    const payload = fixture.provider_payload as {
+      state?: { developer_name?: string };
+    } | null;
+    const developerName = payload?.state?.developer_name;
+    return developerName ? FULLTIME_STATES.has(developerName) : false;
   }
 }

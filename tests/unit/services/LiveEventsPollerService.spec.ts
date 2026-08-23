@@ -301,6 +301,30 @@ describe("LiveEventsPollerService", () => {
     expect(halftimeCalls).toHaveLength(0);
   });
 
+  it("fires the fulltime synthetic trigger when provider state reaches FT", async () => {
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {
+        sm_fixture_id: 1101,
+        provider_payload: { state: { developer_name: "FT" } },
+      },
+      events: [],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+    await poller.poll();
+
+    const fulltimeCalls = deps.liveFeed.processEvent.mock.calls.filter(
+      ([input]) => input.eventType === "fulltime"
+    );
+    expect(fulltimeCalls).toHaveLength(1);
+    expect(fulltimeCalls[0][0]).toEqual(
+      expect.objectContaining({ smEventId: 1101 * 1000 + 903 })
+    );
+  });
+
   it("fast-finalizes a fixture that drops out of the live list", async () => {
     const deps = createDeps();
     deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
