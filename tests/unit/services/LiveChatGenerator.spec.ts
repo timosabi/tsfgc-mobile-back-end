@@ -23,8 +23,10 @@ function context(): LiveChatContext {
     matchweek: "Matchweek 2",
     minute: 27,
     score: { home: 1, away: 0 },
-    affectedPositive: ["Alex"],
-    affectedNegative: ["Bianca"],
+    impacts: [
+      { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0 },
+      { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+    ],
     reason: "score_prediction_changed",
   };
 }
@@ -56,7 +58,7 @@ describe("ClaudeLiveChatGenerator", () => {
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 80,
+        max_tokens: 160,
         messages: [{ role: "user", content: JSON.stringify(context()) }],
       })
     );
@@ -87,8 +89,7 @@ describe("MockLiveChatGenerator", () => {
   it("names the scorer when player is present", async () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
-      affectedPositive: [],
-      affectedNegative: [],
+      impacts: [],
       player: "Saka",
     });
 
@@ -118,8 +119,7 @@ describe("MockLiveChatGenerator", () => {
   it("mentions the assist when present on a normal goal", async () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
-      affectedPositive: [],
-      affectedNegative: [],
+      impacts: [],
       player: "Saka",
       assistedBy: "Odegaard",
     });
@@ -130,8 +130,7 @@ describe("MockLiveChatGenerator", () => {
   it("falls back to a generic goal message when no player is given", async () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
-      affectedPositive: [],
-      affectedNegative: [],
+      impacts: [],
       player: null,
     });
 
@@ -142,8 +141,7 @@ describe("MockLiveChatGenerator", () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
       eventType: "red_card",
-      affectedPositive: [],
-      affectedNegative: [],
+      impacts: [],
       player: "Rice",
     });
 

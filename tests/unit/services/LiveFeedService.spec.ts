@@ -127,8 +127,10 @@ describe("LiveFeedService", () => {
     expect(chatGenerator.generate).toHaveBeenCalledWith(
       expect.objectContaining({
         groupName: "Los Muchachos",
-        affectedPositive: ["Alex"],
-        affectedNegative: ["Bianca"],
+        impacts: [
+          { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0 },
+          { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+        ],
       })
     );
     expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
@@ -164,8 +166,10 @@ describe("LiveFeedService", () => {
     expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
-          affectedPositive: ["Alex"],
-          affectedNegative: ["Bianca"],
+          impacts: [
+            { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0 },
+            { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+          ],
         }),
       }),
     );

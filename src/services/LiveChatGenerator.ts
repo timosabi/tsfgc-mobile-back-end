@@ -1,9 +1,28 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+export type PredictionChangeType =
+  | "exact_gained"
+  | "exact_lost"
+  | "result_gained"
+  | "result_lost"
+  | "total_gained"
+  | "total_lost"
+  | "red_card_correct"
+  | "red_card_wrong";
+
+export type PredictionImpact = {
+  name: string;
+  change: PredictionChangeType;
+  predictedHome?: number | null;
+  predictedAway?: number | null;
+};
+
 export type LiveChatContext = {
   groupName: string;
   eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85" | "fulltime";
   fixtureName: string;
+  homeTeam?: string | null;
+  awayTeam?: string | null;
   matchweek?: string | null;
   minute: number | null;
   score?: {
@@ -15,8 +34,7 @@ export type LiveChatContext = {
   team?: string | null;
   isPenalty?: boolean;
   isOwnGoal?: boolean;
-  affectedPositive: string[];
-  affectedNegative: string[];
+  impacts: PredictionImpact[];
   reason: string;
 };
 
@@ -24,68 +42,53 @@ export interface LiveChatGenerator {
   generate(context: LiveChatContext): Promise<string>;
 }
 
+type ImpactGroup = {
+  change: PredictionChangeType;
+  predictedHome?: number | null;
+  predictedAway?: number | null;
+  names: string[];
+};
+
 export class MockLiveChatGenerator implements LiveChatGenerator {
   async generate(context: LiveChatContext): Promise<string> {
     const minute = context.minute ? `${context.minute}' ` : "";
-    const goalClause = this.goalClause(context);
-    const cardedClause = context.player ? ` ${context.player} sees red.` : "";
+    const lead = this.leadClause(context);
+    const impactText = this.impactSentences(context.impacts).join(" ");
 
-    if (!context.affectedPositive.length && !context.affectedNegative.length) {
-      if (context.eventType === "red_card") {
-        return `${minute}Red card in ${context.fixtureName}.${cardedClause} ${context.groupName} just got spicy.`;
-      }
+    return `${minute}${lead}${impactText ? ` ${impactText}` : ""}`;
+  }
 
-      const score =
-        context.score?.home !== null && context.score?.away !== null
-          ? ` ${context.score?.home}-${context.score?.away}.`
-          : ".";
-      return `${minute}${goalClause} for ${context.fixtureName}${score} ${context.groupName} leaderboard may move.`;
-    }
-
-    const winners = context.affectedPositive.slice(0, 2).join(" and ");
-    const losers = context.affectedNegative.slice(0, 2).join(" and ");
-
+  private leadClause(context: LiveChatContext): string {
     if (context.eventType === "red_card") {
-      if (winners && losers) {
-        return `${minute}Red card chaos.${cardedClause} ${winners} called it, ${losers} did not enjoy that plot twist.`;
-      }
-
-      if (winners) {
-        return `${minute}Red card chaos.${cardedClause} ${winners} saw it coming and now looks annoyingly wise.`;
-      }
-
-      return `${minute}Red card chaos.${cardedClause} ${losers} backed calm football. Bad timing.`;
+      const cardedClause = context.player ? ` ${context.player} sees red.` : "";
+      return `Red card in ${context.fixtureName}.${cardedClause}`;
     }
 
     if (context.eventType === "halftime") {
-      return `${minute}Half-time in ${context.fixtureName}. ${context.groupName} gets a breather and the predictions get judged silently.`;
-    }
-
-    if (context.eventType === "penalty") {
-      return `${minute}Penalty drama in ${context.fixtureName}. Someone's prediction is about to sweat.`;
-    }
-
-    if (context.eventType === "minute_85") {
-      return `${minute}Five-ish minutes left in ${context.fixtureName}. ${context.groupName}, this is where tables wobble.`;
+      return `Half-time in ${context.fixtureName}.`;
     }
 
     if (context.eventType === "fulltime") {
-      const score =
-        context.score?.home !== null && context.score?.away !== null
-          ? ` ${context.score?.home}-${context.score?.away}.`
-          : ".";
-      return `${minute}Full time in ${context.fixtureName}${score} ${context.groupName}, go check your points.`;
+      const score = this.scoreSuffix(context);
+      return `Full time in ${context.fixtureName}${score}`;
     }
 
-    if (winners && losers) {
-      return `${minute}${goalClause}. ${winners} move closer, ${losers} watch a nice prediction wobble.`;
+    if (context.eventType === "penalty") {
+      return `Penalty awarded in ${context.fixtureName}.`;
     }
 
-    if (winners) {
-      return `${minute}${goalClause}. ${winners} suddenly look like football prophets.`;
+    if (context.eventType === "minute_85") {
+      return `Five minutes left in ${context.fixtureName}.`;
     }
 
-    return `${minute}${goalClause}. ${losers} just felt that prediction take damage.`;
+    const score = this.scoreSuffix(context);
+    return `${this.goalClause(context)} for ${context.fixtureName}${score}`;
+  }
+
+  private scoreSuffix(context: LiveChatContext): string {
+    return context.score?.home !== null && context.score?.away !== null
+      ? ` ${context.score?.home}-${context.score?.away}.`
+      : ".";
   }
 
   private goalClause(context: LiveChatContext): string {
@@ -95,29 +98,82 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
     if (context.assistedBy) return `${context.player} scores (assist: ${context.assistedBy})`;
     return `${context.player} scores`;
   }
+
+  private impactSentences(impacts: PredictionImpact[]): string[] {
+    const groups = new Map<string, ImpactGroup>();
+
+    for (const impact of impacts) {
+      const key = `${impact.change}:${impact.predictedHome ?? ""}:${impact.predictedAway ?? ""}`;
+      const group = groups.get(key) ?? {
+        change: impact.change,
+        predictedHome: impact.predictedHome,
+        predictedAway: impact.predictedAway,
+        names: [],
+      };
+      group.names.push(impact.name);
+      groups.set(key, group);
+    }
+
+    return Array.from(groups.values()).map((group) => this.impactSentence(group));
+  }
+
+  private impactSentence(group: ImpactGroup): string {
+    const names = this.joinNames(group.names);
+    const plural = group.names.length > 1;
+    const score = `${group.predictedHome}-${group.predictedAway}`;
+    const total = (group.predictedHome ?? 0) + (group.predictedAway ?? 0);
+
+    switch (group.change) {
+      case "exact_gained":
+        return `${names} ${plural ? "now have" : "now has"} the exact score with ${score}.`;
+      case "exact_lost":
+        return `${names} ${plural ? "no longer have" : "no longer has"} the exact score (predicted ${score}).`;
+      case "result_gained":
+        return `${names} ${plural ? "have" : "has"} the correct result with a ${score} prediction.`;
+      case "result_lost":
+        return `${names} ${plural ? "no longer have" : "no longer has"} the correct result (predicted ${score}).`;
+      case "total_gained":
+        return `${names} ${plural ? "are" : "is"} now closest on total goals with ${total}.`;
+      case "total_lost":
+        return `${names} ${plural ? "are" : "is"} no longer closest on total goals.`;
+      case "red_card_correct":
+        return `${names} correctly called a red card.`;
+      case "red_card_wrong":
+        return `${names} incorrectly predicted a red card.`;
+      default:
+        return "";
+    }
+  }
+
+  private joinNames(names: string[]): string {
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} and ${names[1]}`;
+    return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  }
 }
 
-const SYSTEM_PROMPT = `You write one-line live match reactions for a friends' football-prediction group chat. Tone: fun, banter-y, a bit cheeky, never cruel. Always tie the event back to whose guess just got better or worse when player names are given.
+const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual and informative, not jokes or banter. The purpose is to tell the group exactly how this event changed their predictions -- not to mock or hype anyone.
 
 Match detail fields (use when present, never invent values not present in the given context):
 - "player": who scored or was carded. Mention them by name.
 - "assistedBy": who set up the goal. Mention it only when it adds color, not every time.
-- "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true — these change the story (an own goal is bad luck for the scoring team, not skill).
-- "team": which side the event belongs to, for context if the fixture name alone is ambiguous.
+- "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
+- "team" / "homeTeam" / "awayTeam": which side the event belongs to, for context.
+- "impacts": an array of { name, change, predictedHome, predictedAway } describing exactly who was affected and how. "change" is one of: exact_gained, exact_lost, result_gained, result_lost, total_gained, total_lost, red_card_correct, red_card_wrong. Group people with the identical change (and identical predicted score, where relevant) into one factual sentence instead of naming them separately.
 
 Rules:
 - Output ONLY the message text. No quotes, no markdown, no preamble.
-- One or two short sentences, under 180 characters total.
-- Mention named players from "player"/affectedPositive/affectedNegative when present; never invent stats, names, or scorelines not present in the given context.
-- If no players are affected, write a generic reaction to the event for the group, still naming the scorer if "player" is present.
+- Start with what happened in the match (the goal/card/milestone), then state the prediction impact as separate factual sentence(s) built directly from "impacts".
+- Never invent stats, names, scorelines, or reactions not present in the given context.
+- If "impacts" is empty, just report the match event -- no impact sentence.
+- No banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary -- state facts plainly.
 
 Examples of the tone to match:
-"62' Red card chaos. George called it, Alex did not enjoy that plot twist."
-"70' Saka scores! George suddenly looks like a football prophet."
-"81' Penalty converted by Kane, assisted by nobody but his own nerve. Alex's exact-score guess just died."
-"45' Own goal from Gabriel — brutal way to go 1-0 down. Someone's defence prediction just aged badly."
-"85' Five-ish minutes left in Thór vs Víkingur Reykjavík. Geo Iceland 2, this is where tables wobble."
-"90' Full time in Arsenal vs Chelsea 2-1. Geo Iceland 2, go check your points."`;
+"62' Red card in George's Group. Rice sees red. Alex correctly called a red card. Bianca incorrectly predicted a red card."
+"70' Saka scores for Arsenal vs Chelsea 1-0. George now has the exact score with 1-0."
+"81' Kane slots the penalty for Arsenal vs Chelsea 2-1. Alex and Bianca no longer have the correct result (predicted 1-1)."
+"45' Own goal from Gabriel -- Arsenal vs Chelsea 0-1. Molly is now closest on total goals with 1."
+"90' Full time in Thór vs Víkingur Reykjavík 2-1. Geo Iceland now has the exact score with 2-1."`;
 
 export class ClaudeLiveChatGenerator implements LiveChatGenerator {
   private readonly client: Anthropic | null;
@@ -146,7 +202,7 @@ export class ClaudeLiveChatGenerator implements LiveChatGenerator {
     try {
       const response = await this.client.messages.create({
         model: this.model,
-        max_tokens: 80,
+        max_tokens: 160,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: JSON.stringify(context) }],
       });

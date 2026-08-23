@@ -27,9 +27,14 @@ const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 type TableName = keyof Database["public"]["Tables"];
 type TableInsert<T extends TableName> =
   Database["public"]["Tables"][T]["Insert"];
+type PredictionImpact = {
+  name: string;
+  change: string;
+  predictedHome?: number | null;
+  predictedAway?: number | null;
+};
 type LiveFeedPayload = {
-  affectedPositive: string[];
-  affectedNegative: string[];
+  impacts: PredictionImpact[];
   reason?: string;
   score?: {
     home: number;
@@ -76,8 +81,10 @@ try {
     "red-card message has event context",
   );
   const redCardPayload = liveFeedPayload(redCardMainFeed.payload);
-  assert.deepEqual(redCardPayload.affectedPositive, ["George"]);
-  assert.deepEqual(redCardPayload.affectedNegative, ["Alex"]);
+  assert.deepEqual(sortByName(redCardPayload.impacts), [
+    { name: "Alex", change: "red_card_wrong" },
+    { name: "George", change: "red_card_correct" },
+  ]);
 
   const genericFeed = await liveFeed.listFeed({
     friendsGroupId: setup.emptyGroup.id,
@@ -147,8 +154,10 @@ try {
   );
   assertTruthy(goalAiMessage.includes("Alex"), "goal mentions Alex");
   const goalPayload = liveFeedPayload(goalMessage.payload);
-  assert.deepEqual(goalPayload.affectedPositive, ["George"]);
-  assert.deepEqual(goalPayload.affectedNegative, ["Alex"]);
+  assert.deepEqual(sortByName(goalPayload.impacts), [
+    { name: "Alex", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+    { name: "George", change: "result_gained", predictedHome: 2, predictedAway: 1 },
+  ]);
   assertEqual(
     goalPayload.score?.home,
     1,
@@ -347,6 +356,10 @@ function subscriptionRow(
 async function insertRows<T extends TableName>(table: T, rows: TableInsert<T>[]) {
   const { error } = await db.from(table).insert(rows as never);
   if (error) throw new Error(`${table} insert failed: ${error.message}`);
+}
+
+function sortByName(impacts: PredictionImpact[]): PredictionImpact[] {
+  return [...impacts].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function liveFeedPayload(payload: Json): LiveFeedPayload {

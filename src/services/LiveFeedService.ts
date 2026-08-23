@@ -3,6 +3,8 @@ import type { Database, Json } from "../integrations/supabase/types.js";
 import {
   LiveChatGenerator,
   MockLiveChatGenerator,
+  type PredictionChangeType,
+  type PredictionImpact,
 } from "./LiveChatGenerator.js";
 import { createRepositories, type Repositories } from "../repositories/index.js";
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
@@ -223,6 +225,8 @@ export default class LiveFeedService {
         groupName: group.name,
         eventType: input.eventType,
         fixtureName,
+        homeTeam: fixture.home_team,
+        awayTeam: fixture.away_team,
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
         score: {
@@ -230,8 +234,7 @@ export default class LiveFeedService {
           away: input.awayScore ?? fixture.live_away_score ?? fixture.away_score,
         },
         ...eventDetail,
-        affectedPositive: [],
-        affectedNegative: [],
+        impacts: [] as PredictionImpact[],
         reason: "no_submitted_predictions",
       };
     }
@@ -243,19 +246,21 @@ export default class LiveFeedService {
         submittedUserIds
       );
       const yes = new Set(yesUserIds);
+      const impacts: PredictionImpact[] = submittedUserIds.map((userId) => ({
+        name: profileById.get(userId) ?? "Player",
+        change: yes.has(userId) ? "red_card_correct" : "red_card_wrong",
+      }));
+
       return {
         groupName: group.name,
         eventType: input.eventType,
         fixtureName,
+        homeTeam: fixture.home_team,
+        awayTeam: fixture.away_team,
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
         ...eventDetail,
-        affectedPositive: submittedUserIds
-          .filter((userId) => yes.has(userId))
-          .map((userId) => profileById.get(userId) ?? "Player"),
-        affectedNegative: submittedUserIds
-          .filter((userId) => !yes.has(userId))
-          .map((userId) => profileById.get(userId) ?? "Player"),
+        impacts,
         reason: "red_card_prediction_changed",
       };
     }
@@ -271,8 +276,7 @@ export default class LiveFeedService {
       input.beforeAwayScore ?? fixture.live_away_score ?? fixture.away_score ?? 0;
     const afterHome = input.homeScore ?? beforeHome;
     const afterAway = input.awayScore ?? beforeAway;
-    const positive = new Set<string>();
-    const negative = new Set<string>();
+    const impacts: PredictionImpact[] = [];
 
     for (const prediction of predictions) {
       const before = this.predictionState(
@@ -288,39 +292,46 @@ export default class LiveFeedService {
         afterAway
       );
 
-      if (
-        (!before.exact && after.exact) ||
-        (!before.result && after.result) ||
-        (!before.total && after.total)
-      ) {
-        positive.add(prediction.user_id);
-      }
+      const change = this.mostSignificantChange(before, after);
+      if (!change) continue;
 
-      if (
-        (before.exact && !after.exact) ||
-        (before.result && !after.result) ||
-        (before.total && !after.total)
-      ) {
-        negative.add(prediction.user_id);
-      }
+      impacts.push({
+        name: profileById.get(prediction.user_id) ?? "Player",
+        change,
+        predictedHome: prediction.home_score_prediction,
+        predictedAway: prediction.away_score_prediction,
+      });
     }
 
     return {
       groupName: group.name,
       eventType: input.eventType,
       fixtureName,
+      homeTeam: fixture.home_team,
+      awayTeam: fixture.away_team,
       matchweek: fixture.matchweek,
       minute: input.minute ?? null,
       score: { home: afterHome, away: afterAway },
       ...eventDetail,
-      affectedPositive: Array.from(positive).map(
-        (userId) => profileById.get(userId) ?? "Player"
-      ),
-      affectedNegative: Array.from(negative).map(
-        (userId) => profileById.get(userId) ?? "Player"
-      ),
+      impacts,
       reason: "score_prediction_changed",
     };
+  }
+
+  // Exact implies result and total, so a goal that flips all three for the same
+  // user only gets reported once, as whichever change is most specific -- this
+  // keeps the chat message from listing redundant outcomes for one prediction.
+  private mostSignificantChange(
+    before: PredictionState,
+    after: PredictionState
+  ): PredictionChangeType | null {
+    if (!before.exact && after.exact) return "exact_gained";
+    if (before.exact && !after.exact) return "exact_lost";
+    if (!before.result && after.result) return "result_gained";
+    if (before.result && !after.result) return "result_lost";
+    if (!before.total && after.total) return "total_gained";
+    if (before.total && !after.total) return "total_lost";
+    return null;
   }
 
   private async getSubmittedUserIds(
