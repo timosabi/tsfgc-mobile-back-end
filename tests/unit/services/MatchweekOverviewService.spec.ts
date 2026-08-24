@@ -243,6 +243,32 @@ describe("MatchweekOverviewService", () => {
       })
     ).rejects.toMatchObject({ statusCode: 403 });
   });
+
+  it("ties the matchweek rank when two users have equal points this week", async () => {
+    const { repositories, service } = createService([
+      overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z", {
+        live_home_score: 1,
+        live_away_score: 0,
+      }),
+    ]);
+    repositories.predictions.listByGroupFixtures.mockResolvedValue([
+      predictionRow("user-a", 201, 1, 0),
+      predictionRow("user-b", 201, 1, 0),
+    ]);
+
+    const overview = await service.getOverview({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "current",
+    });
+
+    expect(
+      overview.scores.rows.map((row) => [row.user_id, row.rank, row.rank_display])
+    ).toEqual([
+      ["user-a", 1, "#1"],
+      ["user-b", 1, "=1"],
+    ]);
+  });
 });
 
 function overviewFixture(

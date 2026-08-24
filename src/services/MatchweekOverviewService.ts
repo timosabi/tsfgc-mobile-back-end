@@ -58,6 +58,7 @@ type ScoreBreakdown = {
   group_points: number;
   provisional: boolean;
   rank?: number;
+  rank_display?: string;
 };
 type MatchweekScoreRow = {
   user_id: string;
@@ -68,6 +69,7 @@ type MatchweekScoreRow = {
   points_earned: number;
   provisional: boolean;
   rank?: number;
+  rank_display?: string;
 };
 type ResultSign = "home" | "away" | "draw";
 
@@ -568,7 +570,10 @@ export default class MatchweekOverviewService {
       return b.correct_result_points - a.correct_result_points;
     });
     scores.forEach((score, index) => {
-      score.rank = index + 1;
+      const previous = scores[index - 1];
+      const tiedWithPrevious = previous ? previous.points_earned === score.points_earned : false;
+      score.rank = tiedWithPrevious ? previous!.rank : index + 1;
+      score.rank_display = `${tiedWithPrevious ? "=" : "#"}${score.rank}`;
     });
   }
 
@@ -603,6 +608,7 @@ export default class MatchweekOverviewService {
       points_earned: score.points_earned,
       provisional: score.provisional,
       rank: score.rank,
+      rank_display: score.rank_display,
     };
   }
 
