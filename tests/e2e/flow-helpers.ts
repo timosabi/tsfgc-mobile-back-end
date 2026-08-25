@@ -1,9 +1,14 @@
 import {
   ApiClient,
+  approveE2EUser,
   assertEqual,
   assertTruthy,
   detail,
 } from "./helpers.js";
+
+const { supabaseService } = await import(
+  "../../src/integrations/supabase/supabaseClient.js"
+);
 
 type FixtureRef = {
   id: number;
@@ -59,6 +64,9 @@ export async function signUpAndSignIn(params: {
   });
   const me = await params.client.get("/auth/me");
   assertEqual(signup.user.id, me.user.id, `${params.displayName} auth id is stable`);
+
+  // E2E accounts test unrelated flows, not the membership-approval gate itself.
+  await approveE2EUser(supabaseService, me.user.id);
 
   return {
     client: params.client,

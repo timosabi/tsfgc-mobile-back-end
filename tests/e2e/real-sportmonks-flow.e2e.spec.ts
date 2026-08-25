@@ -2,6 +2,7 @@ import "dotenv/config";
 import { strict as assert } from "node:assert";
 import {
   ApiClient,
+  approveE2EUser,
   assertEqual,
   assertTruthy,
   detail,
@@ -72,6 +73,7 @@ try {
   await client.post("/auth/sign-in", { email, password });
   const me = await client.get("/auth/me");
   assertEqual(readString(me, ["user", "id"]), createdUserId, "signed-in user id matches signup");
+  await approveE2EUser(supabaseService, createdUserId!);
 
   step(`Read competition catalog and verify league ${providerLeagueId} has a current season`);
   const catalog = await client.get("/friends-groups/competitions");

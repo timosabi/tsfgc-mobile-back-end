@@ -1,5 +1,6 @@
 import {
   ApiClient,
+  approveE2EUser,
   assertEqual,
   assertTruthy,
   configureE2EEnv,
@@ -56,6 +57,7 @@ try {
   });
   await userA.post("/auth/sign-in", { email: userAEmail, password });
   const userAId = (await userA.get("/auth/me")).user.id;
+  await approveE2EUser(db, userAId);
 
   await userB.post("/auth/sign-up", {
     email: userBEmail,
@@ -64,6 +66,7 @@ try {
   });
   await userB.post("/auth/sign-in", { email: userBEmail, password });
   const userBId = (await userB.get("/auth/me")).user.id;
+  await approveE2EUser(db, userBId);
 
   await outsider.post("/auth/sign-up", {
     email: outsiderEmail,
@@ -71,6 +74,8 @@ try {
     displayName: `E2E Overview Outsider ${runId}`,
   });
   await outsider.post("/auth/sign-in", { email: outsiderEmail, password });
+  const outsiderId = (await outsider.get("/auth/me")).user.id;
+  await approveE2EUser(db, outsiderId);
 
   const setup = await createFinishedSeason({ userAId, userBId });
 

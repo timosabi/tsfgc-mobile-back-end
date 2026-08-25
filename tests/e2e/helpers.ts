@@ -148,6 +148,14 @@ export function assertTruthy(value: unknown, message: string) {
   detail(`ok: ${message}`);
 }
 
+export async function approveE2EUser(db: TestDb, userId: string) {
+  const { error } = await db
+    .from("profiles")
+    .update({ membership_status: "approved" })
+    .eq("id", userId);
+  if (error) throw new Error(`approveE2EUser failed: ${error.message}`);
+}
+
 export async function insertBatched<T extends TableName>(
   db: TestDb,
   table: T,
