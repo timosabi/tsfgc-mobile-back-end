@@ -3,6 +3,8 @@ import {
   assertEqual,
   cleanupE2EData,
   configureE2EEnv,
+  isolateMockCompetitionSeason,
+  restoreCompetitionSeason,
   startTestServer,
   step,
 } from "./helpers.js";
@@ -16,6 +18,7 @@ import {
   signUpAndSignIn,
   submitSlip,
 } from "./flow-helpers.js";
+import { MOCK_LEAGUE_8_SEASON_ID } from "../../src/integrations/sportmonks/mock-service.js";
 
 const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const password = "Supabase-e2e-password-123!";
@@ -28,6 +31,11 @@ const { supabaseService } = await import(
 );
 
 await cleanupE2EData(supabaseService, { friends: true, auth: true });
+const originalSeasonId = await isolateMockCompetitionSeason(
+  supabaseService,
+  8,
+  MOCK_LEAGUE_8_SEASON_ID
+);
 const server = await startTestServer();
 
 try {
@@ -182,5 +190,6 @@ try {
     await server.close();
   } finally {
     await cleanupE2EData(supabaseService, { friends: true, auth: true });
+    await restoreCompetitionSeason(supabaseService, 8, originalSeasonId);
   }
 }

@@ -4,6 +4,8 @@ import {
   assertTruthy,
   cleanupE2EData,
   configureE2EEnv,
+  isolateMockCompetitionSeason,
+  restoreCompetitionSeason,
   startTestServer,
   step,
 } from "./helpers.js";
@@ -15,6 +17,7 @@ import {
   saveAndSubmitSlip,
   signUpAndSignIn,
 } from "./flow-helpers.js";
+import { MOCK_LEAGUE_8_SEASON_ID } from "../../src/integrations/sportmonks/mock-service.js";
 
 type ScoreRow = {
   user_id: string;
@@ -39,6 +42,11 @@ const { supabaseService } = await import(
 );
 
 await cleanupE2EData(supabaseService, { friends: true, auth: true });
+const originalSeasonId = await isolateMockCompetitionSeason(
+  supabaseService,
+  8,
+  MOCK_LEAGUE_8_SEASON_ID
+);
 const server = await startTestServer();
 
 try {
@@ -171,5 +179,6 @@ try {
     await server.close();
   } finally {
     await cleanupE2EData(supabaseService, { friends: true, auth: true });
+    await restoreCompetitionSeason(supabaseService, 8, originalSeasonId);
   }
 }

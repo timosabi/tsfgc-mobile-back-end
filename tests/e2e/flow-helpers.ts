@@ -5,6 +5,7 @@ import {
   assertTruthy,
   detail,
 } from "./helpers.js";
+import { MOCK_LEAGUE_8_SEASON_ID } from "../../src/integrations/sportmonks/mock-service.js";
 
 const { supabaseService } = await import(
   "../../src/integrations/supabase/supabaseClient.js"
@@ -91,7 +92,7 @@ export async function createFriendsGroup(params: {
         accessType: params.accessType,
         subscription: {
           providerLeagueId: 8,
-          providerSeasonId: 28083,
+          providerSeasonId: MOCK_LEAGUE_8_SEASON_ID,
           competitionName: "Premier League",
           countryName: "England",
           seasonName: "2025/2026",

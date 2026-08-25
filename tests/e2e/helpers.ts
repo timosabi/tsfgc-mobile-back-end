@@ -156,6 +156,66 @@ export async function approveE2EUser(db: TestDb, userId: string) {
   if (error) throw new Error(`approveE2EUser failed: ${error.message}`);
 }
 
+export async function isolateMockCompetitionSeason(
+  db: TestDb,
+  providerLeagueId: number,
+  mockSeasonId: number
+): Promise<number | null> {
+  const { data: competition, error: findError } = await db
+    .from("football_competitions")
+    .select("id, current_provider_season_id")
+    .eq("provider", "sportmonks")
+    .eq("provider_league_id", providerLeagueId)
+    .maybeSingle();
+  if (findError) {
+    throw new Error(`isolateMockCompetitionSeason lookup failed: ${findError.message}`);
+  }
+  if (!competition) {
+    throw new Error(
+      `isolateMockCompetitionSeason: no football_competitions row for league ${providerLeagueId}`
+    );
+  }
+
+  const { error: seasonError } = await db.from("football_seasons").upsert(
+    {
+      competition_id: competition.id,
+      provider: "sportmonks",
+      provider_season_id: mockSeasonId,
+      name: "E2E Mock Season",
+      is_current: true,
+    },
+    { onConflict: "provider,provider_season_id" }
+  );
+  if (seasonError) {
+    throw new Error(`isolateMockCompetitionSeason season upsert failed: ${seasonError.message}`);
+  }
+
+  const { error: updateError } = await db
+    .from("football_competitions")
+    .update({ current_provider_season_id: mockSeasonId })
+    .eq("id", competition.id);
+  if (updateError) {
+    throw new Error(`isolateMockCompetitionSeason update failed: ${updateError.message}`);
+  }
+
+  return competition.current_provider_season_id;
+}
+
+export async function restoreCompetitionSeason(
+  db: TestDb,
+  providerLeagueId: number,
+  originalSeasonId: number | null
+) {
+  const { error } = await db
+    .from("football_competitions")
+    .update({ current_provider_season_id: originalSeasonId })
+    .eq("provider", "sportmonks")
+    .eq("provider_league_id", providerLeagueId);
+  if (error) {
+    throw new Error(`restoreCompetitionSeason failed: ${error.message}`);
+  }
+}
+
 export async function insertBatched<T extends TableName>(
   db: TestDb,
   table: T,
@@ -195,6 +255,12 @@ export async function cleanupE2EData(
   if (scope.auth) {
     await cleanupE2EAuthUsers(db);
   }
+
+  // The mock SportMonks catalog reuses this fixed id range across every e2e
+  // run (see SportMonksMockService). It shares a table with real fixtures
+  // synced by a live dev backend, so always sweep it clean rather than
+  // leaving mock rows to linger in local dev after a test run.
+  await db.from("fixtures").delete().gte("sm_fixture_id", 900001).lte("sm_fixture_id", 900999);
 }
 
 function tryJson(text: string) {

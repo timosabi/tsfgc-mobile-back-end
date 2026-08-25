@@ -5,6 +5,11 @@ import {
 } from "../../services/dto/types.js";
 import SportMonksService from "./service.js";
 
+// Reserved, permanently mock-only season id for league 8 (Premier League) —
+// never a real SportMonks season id, so mock fixtures never collide with
+// real ones synced by a live dev backend into the same local database.
+export const MOCK_LEAGUE_8_SEASON_ID = 900083;
+
 type MockFixtureOptions = {
   smFixtureId: number;
   leagueId: number;
@@ -231,7 +236,7 @@ export default class SportMonksMockService extends SportMonksService {
 
   private baseLeagueFixtures(): FixtureInsert[] {
     const leagueId = 8;
-    const seasonId = 28083;
+    const seasonId = MOCK_LEAGUE_8_SEASON_ID;
 
     return [
       this.fixture({
@@ -315,7 +320,7 @@ export default class SportMonksMockService extends SportMonksService {
       this.fixture({
         smFixtureId: 900003,
         leagueId: 8,
-        seasonId: 28083,
+        seasonId: MOCK_LEAGUE_8_SEASON_ID,
         roundId: 102,
         matchweek: "Matchweek 2",
         homeTeam: "Arsenal",
@@ -329,7 +334,7 @@ export default class SportMonksMockService extends SportMonksService {
       this.fixture({
         smFixtureId: 900004,
         leagueId: 8,
-        seasonId: 28083,
+        seasonId: MOCK_LEAGUE_8_SEASON_ID,
         roundId: 102,
         matchweek: "Matchweek 2",
         homeTeam: "Chelsea",
@@ -348,7 +353,7 @@ export default class SportMonksMockService extends SportMonksService {
       this.fixture({
         smFixtureId: 900004,
         leagueId: 8,
-        seasonId: 28083,
+        seasonId: MOCK_LEAGUE_8_SEASON_ID,
         roundId: 102,
         matchweek: "Matchweek 2",
         homeTeam: "Chelsea",
