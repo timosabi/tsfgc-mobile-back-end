@@ -88,6 +88,10 @@ function profileRow(id: string): ProfileRow {
     last_active_friends_group_id: null,
     is_admin: false,
     points: 0,
+    membership_status: "approved",
+    membership_reviewed_at: null,
+    membership_reviewed_by: null,
+    membership_review_note: null,
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T10:00:00Z",
   };

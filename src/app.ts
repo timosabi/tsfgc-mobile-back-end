@@ -12,6 +12,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import AdminHydrationController from "./controller/AdminHydrationController.js";
 import LiveController from "./controller/LiveController.js";
 import MatchweekPredictionController from "./controller/MatchweekPredictionController.js";
+import MembershipRequestController from "./controller/MembershipRequestController.js";
 
 export function createApp() {
   const app = express();
@@ -44,8 +45,10 @@ export function createApp() {
   const adminHydrationController = new AdminHydrationController();
   const liveController = new LiveController();
   const matchweekPredictionController = new MatchweekPredictionController();
+  const membershipRequestController = new MembershipRequestController();
 
   app.use("/admin", adminHydrationController.router);
+  app.use("/admin", membershipRequestController.router);
   app.use("/", liveController.router);
   app.use("/auth", authController.router);
   app.use("/profiles", profileController.router);

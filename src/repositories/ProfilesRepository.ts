@@ -75,6 +75,37 @@ export default class ProfilesRepository extends BaseRepository<"profiles"> {
     return (data ?? null) as TableRow<"profiles"> | null;
   }
 
+  async listByMembershipStatus(
+    status: string
+  ): Promise<TableRow<"profiles">[]> {
+    const { data, error } = await this.table()
+      .select("*")
+      .eq("membership_status", status)
+      .order("created_at", { ascending: true });
+
+    this.throwOnError(error, "profiles listByMembershipStatus failed");
+    return (data ?? []) as TableRow<"profiles">[];
+  }
+
+  async updateMembershipStatus(
+    userId: string,
+    params: { status: string; reviewedBy: string; reviewNote?: string }
+  ): Promise<TableRow<"profiles">> {
+    const { data, error } = await this.table()
+      .update({
+        membership_status: params.status,
+        membership_reviewed_at: new Date().toISOString(),
+        membership_reviewed_by: params.reviewedBy,
+        membership_review_note: params.reviewNote ?? null,
+      })
+      .eq("id", userId)
+      .select()
+      .single();
+
+    this.throwOnError(error, "profiles updateMembershipStatus failed");
+    return data as TableRow<"profiles">;
+  }
+
   async upsertProfile(
     row: TableUpdate<"profiles"> & { id: string }
   ): Promise<TableRow<"profiles">> {

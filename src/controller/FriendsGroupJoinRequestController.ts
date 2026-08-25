@@ -60,7 +60,7 @@ export default class FriendsGroupJoinRequestController {
     const { auth, friendsGroupJoinRequest, friendsGroupUsers } =
       this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { friendsGroupId } = req.params;
@@ -83,7 +83,7 @@ export default class FriendsGroupJoinRequestController {
     const { auth, friendsGroupJoinRequest, friendsGroup } =
       this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { friendsGroupId } = req.params;
@@ -97,7 +97,7 @@ export default class FriendsGroupJoinRequestController {
   getAllPendingRequestsForOwner = async (req: Request, res: Response) => {
     const { auth, friendsGroupJoinRequest } = this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const data = await friendsGroupJoinRequest.getAllPendingRequestsForOwner(
@@ -111,7 +111,7 @@ export default class FriendsGroupJoinRequestController {
     const { auth, friendsGroupJoinRequest, friendsGroup, friendsGroupUsers } =
       this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { requestId } = req.params;
     if (!requestId) throw new AppError("requestId is required", 400);
 
@@ -141,7 +141,7 @@ export default class FriendsGroupJoinRequestController {
     const { auth, friendsGroupJoinRequest, friendsGroup } =
       this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { requestId } = req.params;
     if (!requestId) throw new AppError("requestId is required", 400);
 

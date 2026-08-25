@@ -52,6 +52,27 @@ export default class AuthService {
     return user;
   }
 
+  async requireApprovedUser() {
+    const user = await this.requireUser();
+
+    const profile = await this.profiles.findProfileById(user.id);
+    const status = profile?.membership_status;
+
+    if (status === "pending") {
+      throw new AppError("Your account is pending approval.", 403);
+    }
+
+    if (status === "rejected") {
+      throw new AppError("Your membership request was not approved.", 403);
+    }
+
+    return user;
+  }
+
+  async getProfile(userId: string) {
+    return this.profiles.findProfileById(userId);
+  }
+
   async requireAdmin() {
     const user = await this.requireUser();
 
@@ -139,6 +160,7 @@ export default class AuthService {
         id: payload.userId,
         display_name: payload.displayName ?? "Player",
         is_admin: isAdmin,
+        membership_status: isAdmin ? "approved" : "pending",
         updated_at: new Date().toISOString(),
       });
     } catch (error) {

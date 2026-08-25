@@ -62,7 +62,7 @@ export default class MatchweekPredictionController {
 
   getMine = async (req: Request, res: Response) => {
     const { auth, slip, friendsGroupUsers } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { friendsGroupId, matchweek } = req.params;
     await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
     const data = await slip.getMine({ userId: user.id, friendsGroupId, matchweek });
@@ -71,7 +71,7 @@ export default class MatchweekPredictionController {
 
   getOverview = async (req: Request, res: Response) => {
     const { auth, overview, friendsGroupUsers } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { friendsGroupId, matchweek } = req.params;
     await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
     const data = await overview.getOverview({
@@ -84,7 +84,7 @@ export default class MatchweekPredictionController {
 
   saveMine = async (req: Request, res: Response) => {
     const { auth, slip, friendsGroupUsers } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { friendsGroupId, matchweek } = req.params;
     await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
     const data = await slip.saveMine({
@@ -98,7 +98,7 @@ export default class MatchweekPredictionController {
 
   submitMine = async (req: Request, res: Response) => {
     const { auth, slip, friendsGroupUsers } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { friendsGroupId, matchweek } = req.params;
     await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
     const data = await slip.submitMine({ userId: user.id, friendsGroupId, matchweek });
@@ -107,7 +107,7 @@ export default class MatchweekPredictionController {
 
   deleteMine = async (req: Request, res: Response) => {
     const { auth, slip, friendsGroupUsers } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     const { friendsGroupId, matchweek } = req.params;
     await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
     const data = await slip.deleteMine({ userId: user.id, friendsGroupId, matchweek });

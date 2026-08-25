@@ -305,21 +305,21 @@ export type Database = {
           friends_group_id: string
           id: string
           joined_at: string
-          role: "owner" | "member"
+          role: string
           user_id: string
         }
         Insert: {
           friends_group_id: string
           id?: string
           joined_at?: string
-          role?: "owner" | "member"
+          role?: string
           user_id: string
         }
         Update: {
           friends_group_id?: string
           id?: string
           joined_at?: string
-          role?: "owner" | "member"
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -596,6 +596,10 @@ export type Database = {
           id: string
           is_admin: boolean
           last_active_friends_group_id: string | null
+          membership_review_note: string | null
+          membership_reviewed_at: string | null
+          membership_reviewed_by: string | null
+          membership_status: string
           points: number
           updated_at: string
         }
@@ -609,6 +613,10 @@ export type Database = {
           id: string
           is_admin?: boolean
           last_active_friends_group_id?: string | null
+          membership_review_note?: string | null
+          membership_reviewed_at?: string | null
+          membership_reviewed_by?: string | null
+          membership_status?: string
           points?: number
           updated_at?: string
         }
@@ -622,6 +630,10 @@ export type Database = {
           id?: string
           is_admin?: boolean
           last_active_friends_group_id?: string | null
+          membership_review_note?: string | null
+          membership_reviewed_at?: string | null
+          membership_reviewed_by?: string | null
+          membership_status?: string
           points?: number
           updated_at?: string
         }
@@ -917,3 +929,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

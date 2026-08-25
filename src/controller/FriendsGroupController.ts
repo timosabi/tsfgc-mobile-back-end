@@ -246,7 +246,7 @@ export default class FriendsGroupController {
     const { auth, friendsGroup, subscriptionService, friendsGroupUsers, client } =
       this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
 
     if (!user) throw new AppError("Unauthorized", 401);
 

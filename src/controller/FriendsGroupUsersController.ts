@@ -68,7 +68,7 @@ export default class FriendsGroupUsersController {
   joinByInvite = async (req: Request, res: Response) => {
     const { auth, friendsGroup, friendsGroupUsers, joinRequests } =
       this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { inviteToken } = req.params;
@@ -110,7 +110,7 @@ export default class FriendsGroupUsersController {
   getFriendsGroupsForUser = async (req: Request, res: Response) => {
     const { auth, friendsGroupUsers } = this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const groups = await friendsGroupUsers.getFriendsGroupsForUser(user.id);
@@ -130,7 +130,7 @@ export default class FriendsGroupUsersController {
   removeUserFromFriendsGroup = async (req: Request, res: Response) => {
     const { auth, friendsGroupUsers } = this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { friendsGroupId } = req.params;
@@ -146,7 +146,7 @@ export default class FriendsGroupUsersController {
   getOwnerMemberList = async (req: Request, res: Response) => {
     const { auth, friendsGroupUsers } = this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { friendsGroupId } = req.params;
@@ -163,7 +163,7 @@ export default class FriendsGroupUsersController {
   kickMember = async (req: Request, res: Response) => {
     const { auth, friendsGroupUsers } = this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { friendsGroupId, userId } = req.params;
@@ -182,7 +182,7 @@ export default class FriendsGroupUsersController {
   transferOwnership = async (req: Request, res: Response) => {
     const { auth, friendsGroupUsers } = this.createServices(req, res);
 
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const { friendsGroupId } = req.params;

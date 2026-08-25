@@ -56,7 +56,7 @@ export default class WeeklyScoreController {
 
   getLeaderboard = async (req: Request, res: Response) => {
     const { auth, weeklyScore, friendsGroupUsers } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
 
     const { friendsGroupId } = req.params;
     if (!friendsGroupId) throw new AppError("friendsGroupId is required", 400);

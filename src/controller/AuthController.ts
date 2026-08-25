@@ -38,12 +38,15 @@ export default class AuthController {
 
     if (!user) throw new AppError("Unauthorized", 401);
 
+    const profile = await auth.getProfile(user.id);
+
     res.json({
       user: {
         id: user.id,
         email: user.email,
         app_metadata: user.app_metadata,
       },
+      profile,
     });
   });
 
@@ -68,7 +71,9 @@ export default class AuthController {
     const { data, error } = await auth.signIn(email, password);
     if (error) throw new AppError("Invalid email or password.", 401);
 
-    res.json({ user: data.user });
+    const profile = data.user ? await auth.getProfile(data.user.id) : null;
+
+    res.json({ user: data.user, profile });
   });
 
   signUp = asyncHandler(async (req: Request, res: Response) => {

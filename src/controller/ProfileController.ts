@@ -23,7 +23,7 @@ export default class ProfileController {
 
   getProfile = async (req: Request, res: Response) => {
     const { auth, profile } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const data = await profile.getProfileData(user.id);
@@ -35,7 +35,7 @@ export default class ProfileController {
 
   updateProfile = async (req: Request, res: Response) => {
     const { auth, profile } = this.createServices(req, res);
-    const user = await auth.requireUser();
+    const user = await auth.requireApprovedUser();
     if (!user) throw new AppError("Unauthorized", 401);
 
     const targetUserId = user.id;
