@@ -91,7 +91,7 @@ export async function createFriendsGroup(params: {
         accessType: params.accessType,
         subscription: {
           providerLeagueId: 8,
-          providerSeasonId: 25583,
+          providerSeasonId: 28083,
           competitionName: "Premier League",
           countryName: "England",
           seasonName: "2025/2026",

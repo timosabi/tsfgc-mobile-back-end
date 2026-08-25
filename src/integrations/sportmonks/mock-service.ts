@@ -231,7 +231,7 @@ export default class SportMonksMockService extends SportMonksService {
 
   private baseLeagueFixtures(): FixtureInsert[] {
     const leagueId = 8;
-    const seasonId = 25583;
+    const seasonId = 28083;
 
     return [
       this.fixture({
@@ -315,7 +315,7 @@ export default class SportMonksMockService extends SportMonksService {
       this.fixture({
         smFixtureId: 900003,
         leagueId: 8,
-        seasonId: 25583,
+        seasonId: 28083,
         roundId: 102,
         matchweek: "Matchweek 2",
         homeTeam: "Arsenal",
@@ -329,7 +329,7 @@ export default class SportMonksMockService extends SportMonksService {
       this.fixture({
         smFixtureId: 900004,
         leagueId: 8,
-        seasonId: 25583,
+        seasonId: 28083,
         roundId: 102,
         matchweek: "Matchweek 2",
         homeTeam: "Chelsea",
@@ -348,7 +348,7 @@ export default class SportMonksMockService extends SportMonksService {
       this.fixture({
         smFixtureId: 900004,
         leagueId: 8,
-        seasonId: 25583,
+        seasonId: 28083,
         roundId: 102,
         matchweek: "Matchweek 2",
         homeTeam: "Chelsea",
