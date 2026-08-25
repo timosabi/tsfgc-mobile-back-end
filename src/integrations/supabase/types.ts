@@ -305,21 +305,21 @@ export type Database = {
           friends_group_id: string
           id: string
           joined_at: string
-          role: string
+          role: "owner" | "member"
           user_id: string
         }
         Insert: {
           friends_group_id: string
           id?: string
           joined_at?: string
-          role?: string
+          role?: "owner" | "member"
           user_id: string
         }
         Update: {
           friends_group_id?: string
           id?: string
           joined_at?: string
-          role?: string
+          role?: "owner" | "member"
           user_id?: string
         }
         Relationships: [
