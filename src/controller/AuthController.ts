@@ -38,7 +38,7 @@ export default class AuthController {
 
     if (!user) throw new AppError("Unauthorized", 401);
 
-    const profile = await auth.getProfile(user.id);
+    const profile = await auth.getProfile(user.id, user.email);
 
     res.json({
       user: {
@@ -71,7 +71,9 @@ export default class AuthController {
     const { data, error } = await auth.signIn(email, password);
     if (error) throw new AppError("Invalid email or password.", 401);
 
-    const profile = data.user ? await auth.getProfile(data.user.id) : null;
+    const profile = data.user
+      ? await auth.getProfile(data.user.id, data.user.email)
+      : null;
 
     res.json({ user: data.user, profile });
   });

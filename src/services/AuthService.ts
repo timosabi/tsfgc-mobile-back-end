@@ -69,21 +69,32 @@ export default class AuthService {
     return user;
   }
 
-  async getProfile(userId: string) {
-    return this.profiles.findProfileById(userId);
+  private isAdminEmail(email?: string | null) {
+    const adminEmails = (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+
+    return !!email && adminEmails.includes(email.toLowerCase());
+  }
+
+  async getProfile(userId: string, email?: string | null) {
+    const profile = await this.profiles.findProfileById(userId);
+
+    if (profile && !profile.is_admin && this.isAdminEmail(email)) {
+      return this.profiles.upsertProfile({ id: userId, is_admin: true });
+    }
+
+    return profile;
   }
 
   async requireAdmin() {
     const user = await this.requireUser();
 
     let isAdmin = user.app_metadata?.role === "admin";
-    const adminEmails = (process.env.ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean);
 
-    if (!isAdmin && user.email) {
-      isAdmin = adminEmails.includes(user.email.toLowerCase());
+    if (!isAdmin) {
+      isAdmin = this.isAdminEmail(user.email);
     }
 
     if (!isAdmin) {
@@ -147,13 +158,7 @@ export default class AuthService {
     email?: string | null;
     displayName?: string;
   }) {
-    const adminEmails = (process.env.ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean);
-    const isAdmin = payload.email
-      ? adminEmails.includes(payload.email.toLowerCase())
-      : false;
+    const isAdmin = this.isAdminEmail(payload.email);
 
     try {
       return await this.profiles.upsertProfile({
