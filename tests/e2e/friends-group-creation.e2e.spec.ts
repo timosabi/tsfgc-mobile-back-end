@@ -95,7 +95,7 @@ try {
   );
   assertEqual(
     openGroupReload.friends_group.currentMatchweek.displayLabel,
-    `${groupCardLeagueName} week 2`,
+    "Matchweek 2",
     "my groups returns group card display label"
   );
   assertEqual(
@@ -128,14 +128,14 @@ try {
     expectedStatus: 409,
   });
 
-  step("Owner cannot create a second friends group");
-  await createFriendsGroup({
+  step("Owner can create a second friends group");
+  const secondGroup = await createFriendsGroup({
     owner: ownerA,
-    name: "E2E Creation Blocked",
-    slug: `e2e-creation-blocked-${runId}`,
+    name: "E2E Creation Second",
+    slug: `e2e-creation-second-${runId}`,
     accessType: "open",
-    expectedStatus: 409,
   });
+  assertEqual(secondGroup.data.status, "approved", "second owned group auto-approves");
 
   step("Another user can create a private group and becomes owner");
   const privateGroup = await createFriendsGroup({
