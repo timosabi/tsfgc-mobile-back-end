@@ -325,7 +325,12 @@ describe("LiveEventsPollerService", () => {
     );
   });
 
-  it("fast-finalizes a fixture that drops out of the live list", async () => {
+  it("fast-finalizes a fixture that drops out of the live list, and still announces fulltime", async () => {
+    // Reproduces the incident: a match went straight from live to gone-from-the-
+    // list (SportMonks stopped reporting it live) before any poll tick ever saw
+    // state=FT while still processing it normally, so the usual
+    // processSyntheticEvents -> fireSynthetic("fulltime") path never ran. Score
+    // finalization still happened via hydration, but no commentary was ever posted.
     const deps = createDeps();
     deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
     deps.live.getLiveFixtures.mockResolvedValueOnce([liveFixture()]);
@@ -333,12 +338,44 @@ describe("LiveEventsPollerService", () => {
     await poller.poll();
 
     expect(deps.hydration.hydrateFinishedFixtures).not.toHaveBeenCalled();
+    expect(deps.liveFeed.processEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "fulltime" })
+    );
 
     deps.live.getLiveFixtures.mockResolvedValueOnce([]);
     await poller.poll();
 
     expect(deps.hydration.hydrateFinishedFixtures).toHaveBeenCalledWith(1, [8, 501]);
     expect(deps.weeklyScore.calculateAllFinished).toHaveBeenCalledTimes(1);
+    expect(deps.liveFeed.processEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "fulltime",
+        smFixtureId: 1101,
+        smEventId: 1101 * 1000 + 903,
+      })
+    );
+  });
+
+  it("doesn't double-fire fulltime for a fixture that drops out after already announcing it live", async () => {
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValueOnce([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {
+        sm_fixture_id: 1101,
+        provider_payload: { state: { developer_name: "FT" } },
+      },
+      events: [],
+    });
+    const poller = createPoller(deps);
+    await poller.poll(); // fires fulltime the normal way, while still "live"
+
+    deps.liveFeed.processEvent.mockClear();
+    deps.live.getLiveFixtures.mockResolvedValueOnce([]); // now it drops out
+    await poller.poll();
+
+    expect(deps.liveFeed.processEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "fulltime" })
+    );
   });
 
   it("does nothing beyond the live-fixtures check when nothing is live", async () => {

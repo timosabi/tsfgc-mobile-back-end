@@ -75,6 +75,22 @@ export default class LiveEventsPollerService {
     );
     await this.deps.hydration.hydrateFinishedFixtures(1, this.deps.leagueIds);
     await this.deps.weeklyScore.calculateAllFinished();
+
+    // A fixture that drops off the live list before we ever observe state=FT
+    // while still polling it normally (processFixture/processSyntheticEvents)
+    // would otherwise never get its "fulltime" commentary event -- the score
+    // gets finalized above, but nothing ever announces it. Fire it here as a
+    // fallback; fireSynthetic's own dedup (plus processEvent's sm_event_id
+    // dedup) makes this a no-op if the normal path already fired it.
+    for (const smFixtureId of droppedOut) {
+      await this.fireSynthetic(
+        { sm_fixture_id: smFixtureId, current_minute: null, provider_payload: null },
+        "fulltime",
+        FULLTIME_KEY_OFFSET,
+        null,
+        null
+      );
+    }
   }
 
   private async processFixture(fixture: FixtureRow): Promise<void> {
