@@ -21,6 +21,7 @@ const FULLTIME_STATES = new Set(["FT", "AET", "FT_PEN"]);
 export default class LiveEventsPollerService {
   private readonly previouslyLive = new Set<number>();
   private readonly firedSynthetic = new Set<number>();
+  private isPolling = false;
 
   constructor(
     private readonly deps: {
@@ -33,21 +34,34 @@ export default class LiveEventsPollerService {
     }
   ) {}
 
-  async poll(): Promise<{ liveCount: number }> {
-    const liveFixtures = await this.deps.live.getLiveFixtures(
-      this.deps.leagueIds
-    );
-    const liveIds = new Set(liveFixtures.map((f) => f.sm_fixture_id));
-
-    await this.finalizeDroppedOutFixtures(liveIds);
-    this.previouslyLive.clear();
-    liveIds.forEach((id) => this.previouslyLive.add(id));
-
-    for (const fixture of liveFixtures) {
-      await this.processFixture(fixture);
+  async poll(): Promise<{ liveCount: number; skipped?: boolean }> {
+    if (this.isPolling) {
+      console.warn("[LivePoller] Skipping tick: previous poll() still in progress");
+      return { liveCount: 0, skipped: true };
     }
 
-    return { liveCount: liveFixtures.length };
+    this.isPolling = true;
+    const startedAt = Date.now();
+
+    try {
+      const liveFixtures = await this.deps.live.getLiveFixtures(
+        this.deps.leagueIds
+      );
+      const liveIds = new Set(liveFixtures.map((f) => f.sm_fixture_id));
+
+      await this.finalizeDroppedOutFixtures(liveIds);
+      this.previouslyLive.clear();
+      liveIds.forEach((id) => this.previouslyLive.add(id));
+
+      for (const fixture of liveFixtures) {
+        await this.processFixture(fixture);
+      }
+
+      return { liveCount: liveFixtures.length };
+    } finally {
+      this.isPolling = false;
+      console.log(`[LivePoller] tick finished in ${Date.now() - startedAt}ms`);
+    }
   }
 
   private async finalizeDroppedOutFixtures(liveIds: Set<number>): Promise<void> {

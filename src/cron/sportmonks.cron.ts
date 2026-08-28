@@ -68,8 +68,10 @@ export async function runLivePoll() {
   }
 
   try {
-    const { liveCount } = await livePoller.poll();
-    if (liveCount > 0) {
+    const { liveCount, skipped } = await livePoller.poll();
+    if (skipped) {
+      console.warn("[CRON] Live poll: previous tick still running, skipped");
+    } else if (liveCount > 0) {
       console.log(`[CRON] Live poll: ${liveCount} fixture(s) live`);
     }
   } catch (e) {

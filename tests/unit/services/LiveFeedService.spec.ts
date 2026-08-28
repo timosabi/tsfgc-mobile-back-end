@@ -96,7 +96,7 @@ function createService() {
 }
 
 describe("LiveFeedService", () => {
-  it("processes a goal into match event, fixture patch, AI context, and feed row", async () => {
+  it("processes a goal into match event, AI context, and feed row, without patching the fixture's score", async () => {
     const { chatGenerator, repositories, service } = createService();
 
     const result = await service.processEvent({
@@ -118,12 +118,10 @@ describe("LiveFeedService", () => {
       }),
       true
     );
-    expect(repositories.fixtures.updateFixtureById).toHaveBeenCalledWith(101, {
-      live_home_score: 1,
-      home_score: 1,
-      live_away_score: 0,
-      away_score: 0,
-    });
+    // Score columns are owned exclusively by the bulk /livescores poll (Source A);
+    // a per-event goal replay (Source B) must never write them -- that race is what
+    // produced the live "4-0 briefly, then corrected to 3-1" incident.
+    expect(repositories.fixtures.updateFixtureById).not.toHaveBeenCalled();
     expect(chatGenerator.generate).toHaveBeenCalledWith(
       expect.objectContaining({
         groupName: "Los Muchachos",
@@ -240,6 +238,89 @@ describe("LiveFeedService", () => {
       reason: "unsupported_event",
     });
     expect(repositories.matchEvents.upsertProviderEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["goal", undefined],
+    ["halftime", undefined],
+    ["minute_85", undefined],
+    ["fulltime", undefined],
+    ["red_card", { has_red_card: true }],
+  ] as const)(
+    "never writes score columns for a %s event (only has_red_card, if anything)",
+    async (eventType, expectedPatch) => {
+      const { repositories, service } = createService();
+      repositories.matchEvents.findBySmEventId.mockResolvedValue(null);
+
+      await service.processEvent({
+        eventType,
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      if (expectedPatch) {
+        expect(repositories.fixtures.updateFixtureById).toHaveBeenCalledWith(
+          101,
+          expectedPatch
+        );
+      } else {
+        expect(repositories.fixtures.updateFixtureById).not.toHaveBeenCalled();
+      }
+    }
+  );
+
+  it("uses the fixture's authoritative live score for commentary, not a stale local replay", async () => {
+    // Reproduces the incident: Source B's replay (input.homeScore/awayScore, e.g.
+    // from a racy goal-history recomputation) says 4-0, but the fixture row --
+    // already corrected by the provider-authoritative bulk /livescores poll
+    // (Source A) -- says 3-1. Commentary must use the corrected value.
+    const { chatGenerator, repositories, service } = createService();
+    repositories.fixtures.findLiveFeedFixture.mockResolvedValue(
+      liveFixture({ live_home_score: 3, live_away_score: 1 })
+    );
+
+    await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 59,
+      homeScore: 4,
+      awayScore: 0,
+    });
+
+    expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ score: { home: 3, away: 1 } })
+    );
+  });
+
+  it("persists the corrected score in the feed row's payload, not the stale replay value", async () => {
+    const { repositories, service } = createService();
+    repositories.fixtures.findLiveFeedFixture.mockResolvedValue(
+      liveFixture({ live_home_score: 3, live_away_score: 1 })
+    );
+
+    await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 59,
+      homeScore: 4,
+      awayScore: 0,
+    });
+
+    expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          event: expect.objectContaining({ homeScore: 3, awayScore: 1 }),
+        }),
+      })
+    );
   });
 });
 

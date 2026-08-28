@@ -134,6 +134,27 @@ export default class LiveFeedService {
     const fixture = await this.getFixture(input);
     if (!fixture) return { created: 0, skipped: true, reason: "fixture_not_found" };
 
+    // Canary: Source A (fixture.live_*_score, provider-authoritative) and Source B
+    // (input.*Score, this event's local replay) should agree by the time an event
+    // is processed. A mismatch here is harmless to what gets persisted/displayed
+    // (Source A always wins, see buildGroupContext/patchFixture), but signals the
+    // replay's own-goal-crediting logic may be diverging from the provider.
+    if (
+      input.homeScore != null &&
+      input.awayScore != null &&
+      fixture.live_home_score != null &&
+      fixture.live_away_score != null &&
+      (input.homeScore !== fixture.live_home_score ||
+        input.awayScore !== fixture.live_away_score)
+    ) {
+      console.warn("[LiveFeed] Source A/B score mismatch", {
+        fixtureId: fixture.id,
+        smFixtureId: fixture.sm_fixture_id,
+        sourceA: { home: fixture.live_home_score, away: fixture.live_away_score },
+        sourceBReplay: { home: input.homeScore, away: input.awayScore },
+      });
+    }
+
     await this.storeMatchEvent(input, fixture);
     await this.patchFixture(input, fixture);
 
@@ -156,8 +177,11 @@ export default class LiveFeedService {
             assistedBy: input.assistedBy ?? null,
             isPenalty: Boolean(input.isPenalty),
             isOwnGoal: Boolean(input.isOwnGoal),
-            homeScore: input.homeScore ?? null,
-            awayScore: input.awayScore ?? null,
+            // Sourced from the already-corrected context.score (Source A) rather than
+            // input.homeScore/awayScore directly, so the persisted payload never
+            // disagrees with the AI-generated text sitting next to it.
+            homeScore: context.score?.home ?? input.homeScore ?? null,
+            awayScore: context.score?.away ?? input.awayScore ?? null,
           },
         };
 
@@ -230,8 +254,8 @@ export default class LiveFeedService {
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
         score: {
-          home: input.homeScore ?? fixture.live_home_score ?? fixture.home_score,
-          away: input.awayScore ?? fixture.live_away_score ?? fixture.away_score,
+          home: fixture.live_home_score ?? fixture.home_score ?? input.homeScore ?? null,
+          away: fixture.live_away_score ?? fixture.away_score ?? input.awayScore ?? null,
         },
         ...eventDetail,
         impacts: [] as PredictionImpact[],
@@ -259,6 +283,10 @@ export default class LiveFeedService {
         awayTeam: fixture.away_team,
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
+        score: {
+          home: fixture.live_home_score ?? fixture.home_score ?? null,
+          away: fixture.live_away_score ?? fixture.away_score ?? null,
+        },
         ...eventDetail,
         impacts,
         reason: "red_card_prediction_changed",
@@ -270,6 +298,11 @@ export default class LiveFeedService {
       fixture.id,
       submittedUserIds
     );
+    // beforeHome/beforeAway/afterHome/afterAway are ONLY for the per-goal prediction
+    // diff below (which specific goal flipped which prediction) -- they need Source
+    // B's incremental replay delta, which the authoritative aggregate can't provide.
+    // Never surface these as a displayed/persisted score; use fixture.live_*_score
+    // (Source A) for that, as the `score` field below does.
     const beforeHome =
       input.beforeHomeScore ?? fixture.live_home_score ?? fixture.home_score ?? 0;
     const beforeAway =
@@ -311,7 +344,10 @@ export default class LiveFeedService {
       awayTeam: fixture.away_team,
       matchweek: fixture.matchweek,
       minute: input.minute ?? null,
-      score: { home: afterHome, away: afterAway },
+      score: {
+        home: fixture.live_home_score ?? fixture.home_score ?? afterHome,
+        away: fixture.live_away_score ?? fixture.away_score ?? afterAway,
+      },
       ...eventDetail,
       impacts,
       reason: "score_prediction_changed",
@@ -410,6 +446,12 @@ export default class LiveFeedService {
     );
   }
 
+  // Score columns are intentionally NOT written here. They're owned exclusively
+  // by the bulk /livescores poll (LiveEventsPollerService.poll -> patchLiveRows),
+  // which is the provider-authoritative aggregate. This per-event replay used to
+  // also write live_home_score/live_away_score/home_score/away_score, racing
+  // against that authoritative write within the same poll tick and occasionally
+  // persisting a transiently wrong score (see live-score race condition fix).
   private async patchFixture(
     input: LiveEventInput,
     fixture: FixtureRow
@@ -417,14 +459,6 @@ export default class LiveFeedService {
     const patch: FixturePatch = {};
 
     if (input.eventType === "red_card") patch.has_red_card = true;
-    if (input.homeScore !== undefined) {
-      patch.live_home_score = input.homeScore;
-      patch.home_score = input.homeScore;
-    }
-    if (input.awayScore !== undefined) {
-      patch.live_away_score = input.awayScore;
-      patch.away_score = input.awayScore;
-    }
 
     if (!Object.keys(patch).length) return;
 

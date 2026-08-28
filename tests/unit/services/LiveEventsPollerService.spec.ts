@@ -352,4 +352,35 @@ describe("LiveEventsPollerService", () => {
     expect(deps.sportMonks.getFixtureById).not.toHaveBeenCalled();
     expect(deps.liveFeed.processEvent).not.toHaveBeenCalled();
   });
+
+  it("skips a tick if the previous poll() call is still in progress", async () => {
+    const deps = createDeps();
+    let resolveFirstFetch: (value: unknown[]) => void;
+    const firstFetch = new Promise<unknown[]>((resolve) => {
+      resolveFirstFetch = resolve;
+    });
+    deps.live.getLiveFixtures
+      .mockImplementationOnce(() => firstFetch)
+      .mockResolvedValue([]);
+
+    const poller = createPoller(deps);
+
+    // Don't await the first call -- it's still "in flight" when the second fires,
+    // simulating a burst of activity making one tick outlast the 30s cron interval.
+    const firstPollPromise = poller.poll();
+    const secondResult = await poller.poll();
+
+    expect(secondResult).toEqual({ liveCount: 0, skipped: true });
+    expect(deps.live.getLiveFixtures).toHaveBeenCalledTimes(1);
+
+    resolveFirstFetch!([]);
+    await expect(firstPollPromise).resolves.toEqual({ liveCount: 0 });
+
+    // The guard clears once the in-flight call finishes, so a later tick proceeds
+    // (only 2 real fetches total: the first call, and this one -- the skipped
+    // second call never reaches getLiveFixtures at all).
+    const thirdResult = await poller.poll();
+    expect(thirdResult).toEqual({ liveCount: 0 });
+    expect(deps.live.getLiveFixtures).toHaveBeenCalledTimes(2);
+  });
 });
