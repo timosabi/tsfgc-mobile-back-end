@@ -13,6 +13,7 @@ import AdminHydrationController from "./controller/AdminHydrationController.js";
 import LiveController from "./controller/LiveController.js";
 import MatchweekPredictionController from "./controller/MatchweekPredictionController.js";
 import MembershipRequestController from "./controller/MembershipRequestController.js";
+import NotificationSubscriptionController from "./controller/NotificationSubscriptionController.js";
 
 export function createApp() {
   const app = express();
@@ -46,10 +47,12 @@ export function createApp() {
   const liveController = new LiveController();
   const matchweekPredictionController = new MatchweekPredictionController();
   const membershipRequestController = new MembershipRequestController();
+  const notificationSubscriptionController = new NotificationSubscriptionController();
 
   app.use("/admin", adminHydrationController.router);
   app.use("/admin", membershipRequestController.router);
   app.use("/", liveController.router);
+  app.use("/", notificationSubscriptionController.router);
   app.use("/auth", authController.router);
   app.use("/profiles", profileController.router);
   app.use("/friends-groups", matchweekPredictionController.router);
