@@ -4,7 +4,7 @@ import type { LiveFeedFixtureRow } from "../../../src/repositories/FixturesRepos
 import type { Repositories } from "../../../src/repositories/index.js";
 import { createRepositoryMock } from "../helpers/mockRepositories.js";
 
-function createService() {
+function createService(pushNotifications?: { sendToUsers: jest.Mock }) {
   const repositories = {
     fixtures: createRepositoryMock<
       Pick<Repositories["fixtures"], "findLiveFeedFixture" | "updateFixtureById">
@@ -90,7 +90,8 @@ function createService() {
     repositories,
     service: new LiveFeedService(
       repositories as unknown as ConstructorParameters<typeof LiveFeedService>[0],
-      chatGenerator
+      chatGenerator,
+      pushNotifications as never
     ),
   };
 }
@@ -321,6 +322,82 @@ describe("LiveFeedService", () => {
         }),
       })
     );
+  });
+
+  it("sends a push notification to submitted users for a goal", async () => {
+    const pushNotifications = { sendToUsers: jest.fn().mockResolvedValue({ sent: 2, skipped: false }) };
+    const { service } = createService(pushNotifications);
+
+    await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 27,
+      homeScore: 1,
+      awayScore: 0,
+    });
+
+    expect(pushNotifications.sendToUsers).toHaveBeenCalledWith(
+      ["user-a", "user-b"],
+      expect.objectContaining({
+        title: "Arsenal vs Chelsea",
+        body: "Goal. Alex suddenly looks wise.",
+        data: { type: "goal", friendsGroupId: "group-1", matchweek: "Matchweek 2" },
+      })
+    );
+  });
+
+  it("sends a push notification for a red card", async () => {
+    const pushNotifications = { sendToUsers: jest.fn().mockResolvedValue({ sent: 2, skipped: false }) };
+    const { service } = createService(pushNotifications);
+
+    await service.processEvent({
+      eventType: "red_card",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 30,
+      minute: 60,
+    });
+
+    expect(pushNotifications.sendToUsers).toHaveBeenCalledWith(
+      ["user-a", "user-b"],
+      expect.objectContaining({ data: expect.objectContaining({ type: "red_card" }) })
+    );
+  });
+
+  it.each(["halftime", "minute_85", "fulltime"] as const)(
+    "does not send a push notification for a %s marker",
+    async (eventType) => {
+      const pushNotifications = { sendToUsers: jest.fn() };
+      const { service } = createService(pushNotifications);
+
+      await service.processEvent({
+        eventType,
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 99,
+        minute: 45,
+      });
+
+      expect(pushNotifications.sendToUsers).not.toHaveBeenCalled();
+    }
+  );
+
+  it("works fine without a pushNotifications dependency at all", async () => {
+    const { service } = createService(undefined);
+
+    await expect(
+      service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      })
+    ).resolves.toMatchObject({ created: 1 });
   });
 });
 

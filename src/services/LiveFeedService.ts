@@ -7,6 +7,7 @@ import {
   type PredictionImpact,
 } from "./LiveChatGenerator.js";
 import { createRepositories, type Repositories } from "../repositories/index.js";
+import type PushNotificationService from "./PushNotificationService.js";
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
 
 type LiveEventInput = {
@@ -92,7 +93,8 @@ export default class LiveFeedService {
 
   constructor(
     clientOrRepositories: SupabaseClient<Database> | LiveFeedRepositories,
-    private chatGenerator: LiveChatGenerator = new MockLiveChatGenerator()
+    private chatGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
+    private pushNotifications?: PushNotificationService
   ) {
     this.repositories = isLiveFeedRepositories(clientOrRepositories)
       ? clientOrRepositories
@@ -162,7 +164,13 @@ export default class LiveFeedService {
 
     const rows = await Promise.all(
       groups.map(async (group) => {
-        const context = await this.buildGroupContext(input, fixture, group);
+        const submittedUserIds = await this.getSubmittedUserIds(group.id, fixture);
+        const context = await this.buildGroupContext(
+          input,
+          fixture,
+          group,
+          submittedUserIds
+        );
         const aiMessage = await this.chatGenerator.generate(context);
         const eventKey = this.eventKey(input);
 
@@ -185,7 +193,7 @@ export default class LiveFeedService {
           },
         };
 
-        return this.repositories.liveFeedEvents.upsertFeedEvent({
+        const feedRow = await this.repositories.liveFeedEvents.upsertFeedEvent({
           friends_group_id: group.id,
           fixture_id: fixture.id,
           matchweek: fixture.matchweek,
@@ -195,6 +203,26 @@ export default class LiveFeedService {
           payload: payload as Json,
           ai_message: aiMessage,
         });
+
+        // Push notifications only for the events users would actually want an
+        // OS-level alert for -- not halftime/85'/fulltime markers, which are
+        // ambient and already visible in the live feed if the app is open.
+        if (
+          this.pushNotifications &&
+          (input.eventType === "goal" || input.eventType === "red_card")
+        ) {
+          await this.pushNotifications.sendToUsers(submittedUserIds, {
+            title: context.fixtureName,
+            body: aiMessage,
+            data: {
+              type: input.eventType,
+              friendsGroupId: group.id,
+              matchweek: String(fixture.matchweek ?? ""),
+            },
+          });
+        }
+
+        return feedRow;
       })
     );
 
@@ -231,9 +259,9 @@ export default class LiveFeedService {
   private async buildGroupContext(
     input: LiveEventInput,
     fixture: FixtureRow,
-    group: GroupRow
+    group: GroupRow,
+    submittedUserIds: string[]
   ) {
-    const submittedUserIds = await this.getSubmittedUserIds(group.id, fixture);
     const profileById = await this.getProfiles(submittedUserIds);
     const fixtureName = `${fixture.home_team} vs ${fixture.away_team}`;
     const eventDetail = {
