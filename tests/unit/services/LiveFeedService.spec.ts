@@ -131,8 +131,8 @@ describe("LiveFeedService", () => {
       expect.objectContaining({
         groupName: "Los Muchachos",
         impacts: [
-          { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: null },
-          { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0, rankDisplay: null },
+          { name: "Alex", change: "exact_gained", rankDisplay: null },
+          { name: "Bianca", change: "exact_lost", rankDisplay: null },
         ],
       })
     );
@@ -170,8 +170,8 @@ describe("LiveFeedService", () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           impacts: [
-            { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: null },
-            { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0, rankDisplay: null },
+            { name: "Alex", change: "exact_gained", rankDisplay: null },
+            { name: "Bianca", change: "exact_lost", rankDisplay: null },
           ],
         }),
       }),
@@ -435,8 +435,8 @@ describe("LiveFeedService", () => {
       expect(chatGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
           impacts: expect.arrayContaining([
-            expect.objectContaining({ name: "Alex", rankDisplay: "#1" }),
-            expect.objectContaining({ name: "Bianca", rankDisplay: "#2" }),
+            expect.objectContaining({ name: "Alex", rankDisplay: "1st" }),
+            expect.objectContaining({ name: "Bianca", rankDisplay: "2nd" }),
           ]),
         })
       );
@@ -464,8 +464,8 @@ describe("LiveFeedService", () => {
       expect(chatGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
           impacts: expect.arrayContaining([
-            expect.objectContaining({ name: "Alex", rankDisplay: "#1" }),
-            expect.objectContaining({ name: "Bianca", rankDisplay: "=1" }),
+            expect.objectContaining({ name: "Alex", rankDisplay: "1st" }),
+            expect.objectContaining({ name: "Bianca", rankDisplay: "tied for 1st" }),
           ]),
         })
       );

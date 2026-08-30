@@ -3,7 +3,6 @@ import type { Database, Json } from "../integrations/supabase/types.js";
 import {
   LiveChatGenerator,
   MockLiveChatGenerator,
-  type PredictionChangeType,
   type PredictionImpact,
 } from "./LiveChatGenerator.js";
 import { createRepositories, type Repositories } from "../repositories/index.js";
@@ -71,11 +70,6 @@ type FixturePatch = Partial<
     "has_red_card" | "live_home_score" | "home_score" | "live_away_score" | "away_score"
   >
 >;
-type PredictionState = {
-  exact: boolean;
-  result: boolean;
-  total: boolean;
-};
 type LiveFeedRepositories = Pick<
   Repositories,
   | "fixtures"
@@ -349,27 +343,20 @@ export default class LiveFeedService {
     const impacts: PredictionImpact[] = [];
 
     for (const prediction of predictions) {
-      const before = this.predictionState(
-        prediction.home_score_prediction,
-        prediction.away_score_prediction,
-        beforeHome,
-        beforeAway
-      );
-      const after = this.predictionState(
-        prediction.home_score_prediction,
-        prediction.away_score_prediction,
-        afterHome,
-        afterAway
-      );
-
-      const change = this.mostSignificantChange(before, after);
-      if (!change) continue;
+      // Only an exact-score flip is worth a chat mention -- a merely-correct
+      // result or a closest-total-goals shift isn't compelling enough to
+      // surface in the live feed.
+      const wasExact =
+        prediction.home_score_prediction === beforeHome &&
+        prediction.away_score_prediction === beforeAway;
+      const isExact =
+        prediction.home_score_prediction === afterHome &&
+        prediction.away_score_prediction === afterAway;
+      if (wasExact === isExact) continue;
 
       impacts.push({
         name: profileById.get(prediction.user_id) ?? "Player",
-        change,
-        predictedHome: prediction.home_score_prediction,
-        predictedAway: prediction.away_score_prediction,
+        change: isExact ? "exact_gained" : "exact_lost",
         rankDisplay: rankByUserId.get(prediction.user_id) ?? null,
       });
     }
@@ -390,22 +377,6 @@ export default class LiveFeedService {
       impacts,
       reason: "score_prediction_changed",
     };
-  }
-
-  // Exact implies result and total, so a goal that flips all three for the same
-  // user only gets reported once, as whichever change is most specific -- this
-  // keeps the chat message from listing redundant outcomes for one prediction.
-  private mostSignificantChange(
-    before: PredictionState,
-    after: PredictionState
-  ): PredictionChangeType | null {
-    if (!before.exact && after.exact) return "exact_gained";
-    if (before.exact && !after.exact) return "exact_lost";
-    if (!before.result && after.result) return "result_gained";
-    if (before.result && !after.result) return "result_lost";
-    if (!before.total && after.total) return "total_gained";
-    if (before.total && !after.total) return "total_lost";
-    return null;
   }
 
   private async getSubmittedUserIds(
@@ -452,7 +423,9 @@ export default class LiveFeedService {
         friendsGroupId,
         matchweek: fixture.matchweek,
       });
-      for (const row of rows) ranks.set(row.user_id, row.rank_display ?? null);
+      for (const row of rows) {
+        ranks.set(row.user_id, this.formatRankDisplay(row.rank_display));
+      }
     } catch (error) {
       console.warn(
         "[LiveFeed] Failed to load matchweek ranks, omitting from commentary",
@@ -461,6 +434,27 @@ export default class LiveFeedService {
     }
 
     return ranks;
+  }
+
+  // Converts MatchweekOverviewService's raw rank_display ("#1", "=2") into a
+  // plain-language phrase ("1st", "tied for 2nd") once, here, so every
+  // consumer (Claude's prompt, the Mock fallback) gets consistent wording
+  // without needing to parse "#"/"=" itself.
+  private formatRankDisplay(rankDisplay: string | null | undefined): string | null {
+    if (!rankDisplay) return null;
+
+    const tied = rankDisplay.startsWith("=");
+    const rankNumber = Number(rankDisplay.slice(1));
+    if (!Number.isFinite(rankNumber)) return null;
+
+    const mod100 = rankNumber % 100;
+    const suffix =
+      mod100 >= 11 && mod100 <= 13
+        ? "th"
+        : { 1: "st", 2: "nd", 3: "rd" }[rankNumber % 10] ?? "th";
+    const ordinal = `${rankNumber}${suffix}`;
+
+    return tied ? `tied for ${ordinal}` : ordinal;
   }
 
   private async getRedCardYesUserIds(
@@ -528,27 +522,6 @@ export default class LiveFeedService {
     if (!Object.keys(patch).length) return;
 
     await this.repositories.fixtures.updateFixtureById(fixture.id, patch);
-  }
-
-  private predictionState(
-    predictedHome: number,
-    predictedAway: number,
-    actualHome: number,
-    actualAway: number
-  ): PredictionState {
-    return {
-      exact: predictedHome === actualHome && predictedAway === actualAway,
-      result:
-        this.resultSign(predictedHome, predictedAway) ===
-        this.resultSign(actualHome, actualAway),
-      total: predictedHome + predictedAway === actualHome + actualAway,
-    };
-  }
-
-  private resultSign(home: number, away: number): "home" | "away" | "draw" {
-    if (home > away) return "home";
-    if (away > home) return "away";
-    return "draw";
   }
 
   private eventKey(input: LiveEventInput): string {

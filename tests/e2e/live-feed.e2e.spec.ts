@@ -30,8 +30,7 @@ type TableInsert<T extends TableName> =
 type PredictionImpact = {
   name: string;
   change: string;
-  predictedHome?: number | null;
-  predictedAway?: number | null;
+  rankDisplay?: string | null;
 };
 type LiveFeedPayload = {
   impacts: PredictionImpact[];
@@ -82,8 +81,8 @@ try {
   );
   const redCardPayload = liveFeedPayload(redCardMainFeed.payload);
   assert.deepEqual(sortByName(redCardPayload.impacts), [
-    { name: "Alex", change: "red_card_wrong" },
-    { name: "George", change: "red_card_correct" },
+    { name: "Alex", change: "red_card_wrong", rankDisplay: null },
+    { name: "George", change: "red_card_correct", rankDisplay: null },
   ]);
 
   const genericFeed = await liveFeed.listFeed({
@@ -149,14 +148,13 @@ try {
   if (!goalMessage) throw new Error("goal feed event missing after assertion");
   const goalAiMessage = goalMessage.ai_message ?? "";
   assertTruthy(
-    goalAiMessage.includes("George"),
-    "goal mentions George",
+    !goalAiMessage.includes("George"),
+    "goal does not mention George -- a merely-correct result is no longer compelling enough to report",
   );
   assertTruthy(goalAiMessage.includes("Alex"), "goal mentions Alex");
   const goalPayload = liveFeedPayload(goalMessage.payload);
   assert.deepEqual(sortByName(goalPayload.impacts), [
-    { name: "Alex", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
-    { name: "George", change: "result_gained", predictedHome: 2, predictedAway: 1 },
+    { name: "Alex", change: "exact_lost", rankDisplay: null },
   ]);
   assertEqual(
     goalPayload.score?.home,

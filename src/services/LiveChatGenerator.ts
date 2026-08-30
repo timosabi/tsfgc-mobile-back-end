@@ -1,20 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+// Only exact-score and red-card outcomes are compelling enough for the live
+// feed -- a merely-correct result or a closest-total-goals shift isn't.
 export type PredictionChangeType =
   | "exact_gained"
   | "exact_lost"
-  | "result_gained"
-  | "result_lost"
-  | "total_gained"
-  | "total_lost"
   | "red_card_correct"
   | "red_card_wrong";
 
 export type PredictionImpact = {
   name: string;
   change: PredictionChangeType;
-  predictedHome?: number | null;
-  predictedAway?: number | null;
   // This person's CURRENT rank in the live matchweek mini-leaderboard, e.g.
   // "#1" (outright) or "=2" (tied) -- the same rank_display shown on the
   // Matchweek Standings page. Never a raw number. Null/absent when unknown.
@@ -48,8 +44,6 @@ export interface LiveChatGenerator {
 
 type ImpactGroup = {
   change: PredictionChangeType;
-  predictedHome?: number | null;
-  predictedAway?: number | null;
   rankDisplay?: string | null;
   names: string[];
 };
@@ -86,8 +80,7 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
       return `Five minutes left in ${context.fixtureName}.`;
     }
 
-    const score = this.scoreSuffix(context);
-    return `${this.goalClause(context)} for ${context.fixtureName}${score}`;
+    return `${this.goalClause(context)}!`;
   }
 
   private scoreSuffix(context: LiveChatContext): string {
@@ -108,11 +101,9 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
     const groups = new Map<string, ImpactGroup>();
 
     for (const impact of impacts) {
-      const key = `${impact.change}:${impact.predictedHome ?? ""}:${impact.predictedAway ?? ""}:${impact.rankDisplay ?? ""}`;
+      const key = `${impact.change}:${impact.rankDisplay ?? ""}`;
       const group = groups.get(key) ?? {
         change: impact.change,
-        predictedHome: impact.predictedHome,
-        predictedAway: impact.predictedAway,
         rankDisplay: impact.rankDisplay,
         names: [],
       };
@@ -126,27 +117,17 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
   private impactSentence(group: ImpactGroup): string {
     const names = this.joinNames(group.names);
     const plural = group.names.length > 1;
-    const score = `${group.predictedHome}-${group.predictedAway}`;
-    const total = (group.predictedHome ?? 0) + (group.predictedAway ?? 0);
 
     const base = (() => {
       switch (group.change) {
         case "exact_gained":
-          return `${names} ${plural ? "now have" : "now has"} the exact score with ${score}.`;
+          return `${names} ${plural ? "have" : "has"} hit their exact score!`;
         case "exact_lost":
-          return `${names} ${plural ? "no longer have" : "no longer has"} the exact score (predicted ${score}).`;
-        case "result_gained":
-          return `${names} ${plural ? "have" : "has"} the correct result with a ${score} prediction.`;
-        case "result_lost":
-          return `${names} ${plural ? "no longer have" : "no longer has"} the correct result (predicted ${score}).`;
-        case "total_gained":
-          return `${names} ${plural ? "are" : "is"} now closest on total goals with ${total}.`;
-        case "total_lost":
-          return `${names} ${plural ? "are" : "is"} no longer closest on total goals.`;
+          return `${names} ${plural ? "no longer have" : "no longer has"} their exact score.`;
         case "red_card_correct":
-          return `${names} correctly called a red card.`;
+          return `${names} ${plural ? "pick up" : "picks up"} the Red Card bonus!`;
         case "red_card_wrong":
-          return `${names} incorrectly predicted a red card.`;
+          return `${names} ${plural ? "miss out on" : "misses out on"} the Red Card bonus.`;
         default:
           return "";
       }
@@ -155,33 +136,14 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
     return base ? `${base}${this.rankClause(group)}` : "";
   }
 
+  // group.rankDisplay is already a plain phrase ("1st", "tied for 2nd") by
+  // the time it reaches here -- see LiveFeedService.formatRankDisplay.
   private rankClause(group: ImpactGroup): string {
     if (!group.rankDisplay) return "";
 
-    const tied = group.rankDisplay.startsWith("=");
-    const rankNumber = Number(group.rankDisplay.slice(1));
-    if (!Number.isFinite(rankNumber)) return "";
-
     const names = this.joinNames(group.names);
-    const ordinal = this.ordinal(rankNumber);
-    return tied
-      ? ` This ties ${names} for ${ordinal} for the matchweek.`
-      : ` This puts ${names} in ${ordinal} for the matchweek.`;
-  }
-
-  private ordinal(n: number): string {
-    const mod100 = n % 100;
-    if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
-    switch (n % 10) {
-      case 1:
-        return `${n}st`;
-      case 2:
-        return `${n}nd`;
-      case 3:
-        return `${n}rd`;
-      default:
-        return `${n}th`;
-    }
+    const plural = group.names.length > 1;
+    return ` ${names} ${plural ? "are" : "is"} now ${group.rankDisplay} for the matchweek.`;
   }
 
   private joinNames(names: string[]): string {
@@ -191,29 +153,28 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
   }
 }
 
-const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual and informative, not jokes or banter. The purpose is to tell the group exactly how this event affects their predictions and in relation to their matchweek position.
+const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual, friendly, and SHORT -- one short clause for what happened, plus one short clause per compelling impact. No banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary.
 
 Match detail fields (use when present, never invent values not present in the given context):
 - "player": who scored or was red carded. Mention them by name.
 - "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
-- "impacts": an array of { name, change, predictedHome, predictedAway, rankDisplay } describing exactly who was affected and how. "change" is one of: exact_gained, exact_lost, result_gained, result_lost, total_gained, total_lost, red_card_correct, red_card_wrong. Group people with the identical change (and identical predicted score, where relevant) into one factual sentence instead of naming them separately.
-- "impacts[].rankDisplay": that person's CURRENT rank in the live matchweek mini-leaderboard, e.g. "#1" (outright) or "=2" (tied). State it as their current position only -- never invent or imply a "moved from/to" change, since only the current rank is known here. Omit any rank mention if rankDisplay is null/absent.
+- "impacts": an array of { name, change, rankDisplay }. "change" is either "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct) or "red_card_correct"/"red_card_wrong" (their red-card pick just hit/missed). These are deliberately the ONLY outcomes worth reporting -- a merely-correct result or a closest-total-goals shift is not included in this data at all, so never invent or infer one.
+- "impacts[].rankDisplay": that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". Use it exactly as given -- never output a "#" or "=" symbol. State it as their current position only, never as a "moved from/to" change (only the current rank is known here). Omit any rank mention if rankDisplay is null/absent.
 
 Rules:
 - Output ONLY the message text. No quotes, no markdown, no preamble.
-- Start with what happened in the match (the goal/card/milestone), then state the prediction impact as separate factual sentence(s) built directly from "impacts".
+- Be brief. State what happened in the match in one short clause (e.g. "Maguire scores!", "Rice sees red."), then a separate short clause per person in "impacts". Do not add a plain score-recap sentence after a goal (e.g. never a standalone "Team A 2-1 Team B." sentence) -- the fixture and score are already shown elsewhere in the app.
 - Never invent stats, names, scorelines, or reactions not present in the given context.
-- If "impacts" is empty, just report the match event -- no impact sentence.
-- No banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary -- state facts plainly but be friendly.
-- A "fulltime" event marks the end of ONLY that one fixture. A matchweek has many fixtures, often spread across several days -- never say or imply that the matchweek itself has ended, is complete, or is over. Just report that this specific match has finished.
+- If "impacts" is empty, just report the match event -- nothing more.
+- A "fulltime" event marks the end of ONLY that one fixture, and should still state that fixture's final score. A matchweek has many fixtures, often spread across several days -- never say or imply that the matchweek itself has ended, is complete, or is over.
 
 Examples of the tone to match:
-"Half Time, So far so good for George and Molly"
-"62' Red card! Rice sees red. Alex gets it right!"
-"70' Saka scores!. Exact score for Alex, putting him in 1st for the matchweek."
-"81' Kane scores from the penalty box. Alex and Bianca's correct result guesses are no good. (predicted 1-1)."
-"45' Own goal! Gabriel. Molly now closest on total goals with 1. She's 3rd for the matchweek."
-"90' Full time in Chelsea vs Arsenal. George has the exact score with 2-1."`;
+"56' Maguire scores! Molly has hit their exact score, now 1st for the matchweek."
+"62' Red card! Rice sees red. Alex picks up the Red Card bonus!"
+"70' Saka scores! Alex no longer has their exact score."
+"81' Kane scores from the penalty box."
+"45' Own goal from Gabriel."
+"90' Full time in Chelsea vs Arsenal 2-1."`;
 
 export class ClaudeLiveChatGenerator implements LiveChatGenerator {
   private readonly client: Anthropic | null;
