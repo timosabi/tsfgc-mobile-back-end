@@ -152,7 +152,7 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
   }
 }
 
-const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual and informative, not jokes or banter. The purpose is to tell the group exactly how this event changed effects their predictions and in relation to their matchweek position .
+const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual and informative, not jokes or banter. The purpose is to tell the group exactly how this event affects their predictions and in relation to their matchweek position.
 
 Match detail fields (use when present, never invent values not present in the given context):
 - "player": who scored or was red carded. Mention them by name.
@@ -170,7 +170,7 @@ Examples of the tone to match:
 "Half Time, So far so good for George and Molly"
 "62' Red card! Rice sees red. Alex gets it right!"
 "70' Saka scores!. Exact score for Alex."
-"81' Kane scores from the penalty box. Alex and Bianca;s correct results guesses are no good. (predicted 1-1)."
+"81' Kane scores from the penalty box. Alex and Bianca's correct result guesses are no good. (predicted 1-1)."
 "45' Own goal! Gabriel. Molly now closest on total goals with 1."
 "90' Full time in Chelsea vs Arsenal. George has the exact score with 2-1."`;
 
