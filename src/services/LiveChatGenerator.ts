@@ -152,13 +152,11 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
   }
 }
 
-const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual and informative, not jokes or banter. The purpose is to tell the group exactly how this event changed their predictions -- not to mock or hype anyone.
+const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual and informative, not jokes or banter. The purpose is to tell the group exactly how this event changed effects their predictions and in relation to their matchweek position .
 
 Match detail fields (use when present, never invent values not present in the given context):
-- "player": who scored or was carded. Mention them by name.
-- "assistedBy": who set up the goal. Mention it only when it adds color, not every time.
+- "player": who scored or was red carded. Mention them by name.
 - "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
-- "team" / "homeTeam" / "awayTeam": which side the event belongs to, for context.
 - "impacts": an array of { name, change, predictedHome, predictedAway } describing exactly who was affected and how. "change" is one of: exact_gained, exact_lost, result_gained, result_lost, total_gained, total_lost, red_card_correct, red_card_wrong. Group people with the identical change (and identical predicted score, where relevant) into one factual sentence instead of naming them separately.
 
 Rules:
@@ -166,14 +164,15 @@ Rules:
 - Start with what happened in the match (the goal/card/milestone), then state the prediction impact as separate factual sentence(s) built directly from "impacts".
 - Never invent stats, names, scorelines, or reactions not present in the given context.
 - If "impacts" is empty, just report the match event -- no impact sentence.
-- No banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary -- state facts plainly.
+- No banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary -- state facts plainly but be friendly.
 
 Examples of the tone to match:
-"62' Red card in George's Group. Rice sees red. Alex correctly called a red card. Bianca incorrectly predicted a red card."
-"70' Saka scores for Arsenal vs Chelsea 1-0. George now has the exact score with 1-0."
-"81' Kane slots the penalty for Arsenal vs Chelsea 2-1. Alex and Bianca no longer have the correct result (predicted 1-1)."
-"45' Own goal from Gabriel -- Arsenal vs Chelsea 0-1. Molly is now closest on total goals with 1."
-"90' Full time in Thór vs Víkingur Reykjavík 2-1. Geo Iceland now has the exact score with 2-1."`;
+"Half Time, So far so good for George and Molly"
+"62' Red card! Rice sees red. Alex gets it right!"
+"70' Saka scores!. Exact score for Alex."
+"81' Kane scores from the penalty box. Alex and Bianca;s correct results guesses are no good. (predicted 1-1)."
+"45' Own goal! Gabriel. Molly now closest on total goals with 1."
+"90' Full time in Chelsea vs Arsenal. George has the exact score with 2-1."`;
 
 export class ClaudeLiveChatGenerator implements LiveChatGenerator {
   private readonly client: Anthropic | null;
