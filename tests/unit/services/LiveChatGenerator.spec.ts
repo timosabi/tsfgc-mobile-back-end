@@ -163,18 +163,14 @@ describe("MockLiveChatGenerator", () => {
     expect(message).toContain("Bianca no longer has their exact score.");
   });
 
-  it("mentions the Red Card bonus being gained and missed", async () => {
+  it("mentions the Red Card bonus being picked up", async () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
       eventType: "red_card",
-      impacts: [
-        { name: "Alex", change: "red_card_correct", rankDisplay: null },
-        { name: "Bianca", change: "red_card_wrong", rankDisplay: null },
-      ],
+      impacts: [{ name: "Alex", change: "red_card_correct", rankDisplay: null }],
     });
 
     expect(message).toContain("Alex picks up the Red Card bonus!");
-    expect(message).toContain("Bianca misses out on the Red Card bonus.");
   });
 
   it("mentions an outright matchweek rank", async () => {

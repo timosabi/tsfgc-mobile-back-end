@@ -72,8 +72,8 @@ try {
     "red-card message mentions positive prediction",
   );
   assertTruthy(
-    redCardMessage.includes("Alex"),
-    "red-card message mentions negative prediction",
+    !redCardMessage.includes("Alex"),
+    "red-card message does not mention Alex -- only a correct guess is reported",
   );
   assertTruthy(
     redCardMessage.toLowerCase().includes("red card"),
@@ -81,7 +81,6 @@ try {
   );
   const redCardPayload = liveFeedPayload(redCardMainFeed.payload);
   assert.deepEqual(sortByName(redCardPayload.impacts), [
-    { name: "Alex", change: "red_card_wrong", rankDisplay: null },
     { name: "George", change: "red_card_correct", rankDisplay: null },
   ]);
 

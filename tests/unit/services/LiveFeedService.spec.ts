@@ -451,7 +451,14 @@ describe("LiveFeedService", () => {
           ],
         }),
       };
-      const { chatGenerator, service } = createService(undefined, matchweekOverview);
+      const { chatGenerator, repositories, service } = createService(
+        undefined,
+        matchweekOverview
+      );
+      repositories.redCardPredictions.listUserIdsByGroupFixture.mockResolvedValue([
+        { user_id: "user-a", fixture_id: 101 },
+        { user_id: "user-b", fixture_id: 101 },
+      ]);
 
       await service.processEvent({
         eventType: "red_card",

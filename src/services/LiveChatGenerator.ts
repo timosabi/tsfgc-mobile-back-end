@@ -1,12 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 // Only exact-score and red-card outcomes are compelling enough for the live
-// feed -- a merely-correct result or a closest-total-goals shift isn't.
+// feed -- a merely-correct result or a closest-total-goals shift isn't. And
+// for red cards specifically, only a correct guess is worth mentioning: a
+// group member whose single matchweek red-card pick was for some other
+// fixture isn't meaningfully "wrong" just because a card happened here.
 export type PredictionChangeType =
   | "exact_gained"
   | "exact_lost"
-  | "red_card_correct"
-  | "red_card_wrong";
+  | "red_card_correct";
 
 export type PredictionImpact = {
   name: string;
@@ -126,8 +128,6 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
           return `${names} ${plural ? "no longer have" : "no longer has"} their exact score.`;
         case "red_card_correct":
           return `${names} ${plural ? "pick up" : "picks up"} the Red Card bonus!`;
-        case "red_card_wrong":
-          return `${names} ${plural ? "miss out on" : "misses out on"} the Red Card bonus.`;
         default:
           return "";
       }
@@ -158,7 +158,7 @@ const SYSTEM_PROMPT = `You write live match updates for a friends' football-pred
 Match detail fields (use when present, never invent values not present in the given context):
 - "player": who scored or was red carded. Mention them by name.
 - "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
-- "impacts": an array of { name, change, rankDisplay }. "change" is either "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct) or "red_card_correct"/"red_card_wrong" (their red-card pick just hit/missed). These are deliberately the ONLY outcomes worth reporting -- a merely-correct result or a closest-total-goals shift is not included in this data at all, so never invent or infer one.
+- "impacts": an array of { name, change, rankDisplay }. "change" is "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct) or "red_card_correct" (their red-card pick just hit). These are deliberately the ONLY outcomes worth reporting -- a merely-correct result, a closest-total-goals shift, or a wrong red-card guess is not included in this data at all, so never invent or infer one.
 - "impacts[].rankDisplay": that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". Use it exactly as given -- never output a "#" or "=" symbol. State it as their current position only, never as a "moved from/to" change (only the current rank is known here). Omit any rank mention if rankDisplay is null/absent.
 
 Rules:

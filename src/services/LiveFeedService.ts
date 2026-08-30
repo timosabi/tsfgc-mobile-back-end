@@ -292,14 +292,16 @@ export default class LiveFeedService {
     }
 
     if (input.eventType === "red_card") {
+      // Only mention people who got THIS fixture's red card right -- someone
+      // whose single matchweek red-card pick was for a different fixture
+      // entirely isn't meaningfully "wrong" just because a card happened here.
       const [yesUserIds, rankByUserId] = await Promise.all([
         this.getRedCardYesUserIds(group.id, fixture.id, submittedUserIds),
         this.getMatchweekRanks(fixture, group.id),
       ]);
-      const yes = new Set(yesUserIds);
-      const impacts: PredictionImpact[] = submittedUserIds.map((userId) => ({
+      const impacts: PredictionImpact[] = yesUserIds.map((userId) => ({
         name: profileById.get(userId) ?? "Player",
-        change: yes.has(userId) ? "red_card_correct" : "red_card_wrong",
+        change: "red_card_correct",
         rankDisplay: rankByUserId.get(userId) ?? null,
       }));
 
