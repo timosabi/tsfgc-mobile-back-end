@@ -24,8 +24,8 @@ function context(): LiveChatContext {
     minute: 27,
     score: { home: 1, away: 0 },
     impacts: [
-      { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0 },
-      { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+      { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "#1" },
+      { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0, rankDisplay: null },
     ],
     reason: "score_prediction_changed",
   };
@@ -146,5 +146,65 @@ describe("MockLiveChatGenerator", () => {
     });
 
     expect(message).toContain("Rice sees red");
+  });
+
+  it("mentions an outright matchweek rank", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "#1" },
+      ],
+    });
+
+    expect(message).toContain("This puts Alex in 1st for the matchweek.");
+  });
+
+  it("mentions a tied matchweek rank", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "=2" },
+      ],
+    });
+
+    expect(message).toContain("This ties Alex for 2nd for the matchweek.");
+  });
+
+  it("splits people with the same outcome into separate sentences when their rank differs", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "#1" },
+        { name: "Bianca", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "#3" },
+      ],
+    });
+
+    expect(message).toContain("This puts Alex in 1st for the matchweek.");
+    expect(message).toContain("This puts Bianca in 3rd for the matchweek.");
+    expect(message).not.toContain("Alex and Bianca");
+  });
+
+  it("still merges people with the same outcome when their rank is identical (a genuine tie)", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "=1" },
+        { name: "Bianca", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: "=1" },
+      ],
+    });
+
+    expect(message).toContain("Alex and Bianca");
+    expect(message).toContain("This ties Alex and Bianca for 1st for the matchweek.");
+  });
+
+  it("omits any rank clause when rankDisplay is null", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: null },
+      ],
+    });
+
+    expect(message).not.toContain("matchweek");
   });
 });

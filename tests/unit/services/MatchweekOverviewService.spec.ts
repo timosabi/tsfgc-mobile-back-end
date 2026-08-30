@@ -269,6 +269,97 @@ describe("MatchweekOverviewService", () => {
       ["user-b", 1, "=1"],
     ]);
   });
+
+  describe("getMatchweekScores", () => {
+    it("matches getOverview's rank/rank_display for the same live provisional data", async () => {
+      const { repositories, service } = createService([
+        overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z", {
+          live_home_score: 1,
+          live_away_score: 0,
+        }),
+      ]);
+      repositories.predictions.listByGroupFixtures.mockResolvedValue([
+        predictionRow("user-a", 201, 1, 0),
+        predictionRow("user-b", 201, 1, 0),
+      ]);
+
+      const { rows } = await service.getMatchweekScores({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      });
+
+      expect(rows.map((row) => [row.user_id, row.rank, row.rank_display])).toEqual([
+        ["user-a", 1, "#1"],
+        ["user-b", 1, "=1"],
+      ]);
+    });
+
+    it("uses persisted finished-week scores when available", async () => {
+      const { repositories, service } = createService([
+        overviewFixture(201, "Matchweek 2", "finished", "2026-08-08T12:00:00Z", {
+          home_score: 1,
+          away_score: 0,
+        }),
+      ]);
+      repositories.weeklyScores.listByGroupWeek.mockResolvedValue([
+        weeklyScoreRow("score-a", "user-a", 2, 5, 10),
+        weeklyScoreRow("score-b", "user-b", 2, 1, 3),
+      ]);
+
+      const { rows } = await service.getMatchweekScores({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      });
+
+      expect(rows.find((row) => row.user_id === "user-a")).toMatchObject({
+        points_earned: 5,
+        provisional: false,
+        rank: 1,
+        rank_display: "#1",
+      });
+    });
+
+    it("throws when the group has no active subscription", async () => {
+      const { repositories, service } = createService([
+        overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z"),
+      ]);
+      repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockResolvedValue(
+        null
+      );
+
+      await expect(
+        service.getMatchweekScores({ friendsGroupId: "group-1", matchweek: "Matchweek 2" })
+      ).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it("throws when there are no fixtures for the given matchweek", async () => {
+      const { service } = createService([
+        overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z"),
+      ]);
+
+      await expect(
+        service.getMatchweekScores({ friendsGroupId: "group-1", matchweek: "Matchweek 5" })
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it("never fetches members, profiles, or the live feed -- getOverview's viewer-only work", async () => {
+      const { repositories, service } = createService([
+        overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z", {
+          live_home_score: 1,
+          live_away_score: 0,
+        }),
+      ]);
+
+      await service.getMatchweekScores({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      });
+
+      expect(repositories.friendsGroupUsers.listMembers).not.toHaveBeenCalled();
+      expect(repositories.profiles.listPreviewsByIds).not.toHaveBeenCalled();
+      expect(repositories.liveFeedEvents.listByGroupMatchweek).not.toHaveBeenCalled();
+    });
+  });
 });
 
 function overviewFixture(

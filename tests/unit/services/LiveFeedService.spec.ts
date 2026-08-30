@@ -4,7 +4,10 @@ import type { LiveFeedFixtureRow } from "../../../src/repositories/FixturesRepos
 import type { Repositories } from "../../../src/repositories/index.js";
 import { createRepositoryMock } from "../helpers/mockRepositories.js";
 
-function createService(pushNotifications?: { sendToUsers: jest.Mock }) {
+function createService(
+  pushNotifications?: { sendToUsers: jest.Mock },
+  matchweekOverview?: { getMatchweekScores: jest.Mock }
+) {
   const repositories = {
     fixtures: createRepositoryMock<
       Pick<Repositories["fixtures"], "findLiveFeedFixture" | "updateFixtureById">
@@ -91,7 +94,8 @@ function createService(pushNotifications?: { sendToUsers: jest.Mock }) {
     service: new LiveFeedService(
       repositories as unknown as ConstructorParameters<typeof LiveFeedService>[0],
       chatGenerator,
-      pushNotifications as never
+      pushNotifications as never,
+      matchweekOverview as never
     ),
   };
 }
@@ -127,8 +131,8 @@ describe("LiveFeedService", () => {
       expect.objectContaining({
         groupName: "Los Muchachos",
         impacts: [
-          { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0 },
-          { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+          { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: null },
+          { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0, rankDisplay: null },
         ],
       })
     );
@@ -166,8 +170,8 @@ describe("LiveFeedService", () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           impacts: [
-            { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0 },
-            { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0 },
+            { name: "Alex", change: "exact_gained", predictedHome: 1, predictedAway: 0, rankDisplay: null },
+            { name: "Bianca", change: "exact_lost", predictedHome: 0, predictedAway: 0, rankDisplay: null },
           ],
         }),
       }),
@@ -400,6 +404,120 @@ describe("LiveFeedService", () => {
         awayScore: 0,
       })
     ).resolves.toMatchObject({ created: 1 });
+  });
+
+  describe("matchweek rank attached to impacts", () => {
+    it("attaches each user's current matchweek rank to a goal event's impacts", async () => {
+      const matchweekOverview = {
+        getMatchweekScores: jest.fn().mockResolvedValue({
+          rows: [
+            { user_id: "user-a", rank: 1, rank_display: "#1" },
+            { user_id: "user-b", rank: 2, rank_display: "#2" },
+          ],
+        }),
+      };
+      const { chatGenerator, service } = createService(undefined, matchweekOverview);
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      expect(matchweekOverview.getMatchweekScores).toHaveBeenCalledWith({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      });
+      expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          impacts: expect.arrayContaining([
+            expect.objectContaining({ name: "Alex", rankDisplay: "#1" }),
+            expect.objectContaining({ name: "Bianca", rankDisplay: "#2" }),
+          ]),
+        })
+      );
+    });
+
+    it("attaches each user's current matchweek rank to a red_card event's impacts", async () => {
+      const matchweekOverview = {
+        getMatchweekScores: jest.fn().mockResolvedValue({
+          rows: [
+            { user_id: "user-a", rank: 1, rank_display: "#1" },
+            { user_id: "user-b", rank: 1, rank_display: "=1" },
+          ],
+        }),
+      };
+      const { chatGenerator, service } = createService(undefined, matchweekOverview);
+
+      await service.processEvent({
+        eventType: "red_card",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 99,
+        minute: 45,
+      });
+
+      expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          impacts: expect.arrayContaining([
+            expect.objectContaining({ name: "Alex", rankDisplay: "#1" }),
+            expect.objectContaining({ name: "Bianca", rankDisplay: "=1" }),
+          ]),
+        })
+      );
+    });
+
+    it("degrades gracefully when the rank lookup fails, omitting rankDisplay instead of throwing", async () => {
+      const matchweekOverview = {
+        getMatchweekScores: jest.fn().mockRejectedValue(new Error("boom")),
+      };
+      const { chatGenerator, service } = createService(undefined, matchweekOverview);
+
+      const result = await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      expect(result).toMatchObject({ created: 1 });
+      expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          impacts: expect.arrayContaining([
+            expect.objectContaining({ name: "Alex", rankDisplay: null }),
+          ]),
+        })
+      );
+    });
+
+    it("omits rankDisplay entirely when no matchweekOverview dependency is injected", async () => {
+      const { chatGenerator, service } = createService();
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          impacts: expect.arrayContaining([
+            expect.objectContaining({ name: "Alex", rankDisplay: null }),
+          ]),
+        })
+      );
+    });
   });
 });
 

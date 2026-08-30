@@ -60,7 +60,7 @@ type ScoreBreakdown = {
   rank?: number;
   rank_display?: string;
 };
-type MatchweekScoreRow = {
+export type MatchweekScoreRow = {
   user_id: string;
   exact_score_points: number;
   correct_result_points: number;
@@ -224,6 +224,53 @@ export default class MatchweekOverviewService {
       },
       liveFeed,
     };
+  }
+
+  // Lighter counterpart to getOverview() for callers that only need scores/
+  // ranks, not a specific viewer's prediction-slip visibility (e.g. live
+  // commentary attaching a rank to whoever a goal just affected). Skips
+  // fetching members/profiles/live-feed and building prediction slips --
+  // none of that touches score computation -- and skips getOverview's
+  // "not open yet" gate and "current" matchweek resolution, since the only
+  // caller always passes a concrete matchweek from a fixture whose event
+  // just fired.
+  async getMatchweekScores(params: {
+    friendsGroupId: string;
+    matchweek: string;
+  }): Promise<{ rows: MatchweekScoreRow[] }> {
+    const { subscription } = await this.getGroupContext(params.friendsGroupId);
+    const allFixtures = await this.getSubscriptionFixtures(subscription);
+    const matchweeks = this.groupByMatchweek(allFixtures);
+    const fixtures = matchweeks.get(params.matchweek);
+    if (!fixtures?.length) {
+      throw new AppError("No fixtures found for matchweek", 404);
+    }
+
+    const fixtureIds = fixtures.map((fixture) => fixture.id);
+    const weekNumber = this.weekNumberFromMatchweek(params.matchweek);
+
+    const [submissions, predictions, redCards, persistedScores] = await Promise.all([
+      this.getSubmissions(params.friendsGroupId, params.matchweek),
+      this.getPredictions(params.friendsGroupId, fixtureIds),
+      this.getRedCards(params.friendsGroupId, fixtureIds),
+      this.getWeeklyScores(params.friendsGroupId, weekNumber),
+    ]);
+
+    const submittedUserIds = submissions.map((submission) => submission.user_id);
+    const scores =
+      persistedScores.length > 0
+        ? this.normalizePersistedScores(persistedScores, params.friendsGroupId)
+        : this.calculateProvisionalScores({
+            friendsGroupId: params.friendsGroupId,
+            weekNumber,
+            fixtures,
+            predictions,
+            redCards,
+            submittedUserIds,
+          });
+    this.rankScores(scores);
+
+    return { rows: scores.map((score) => this.toMatchweekScoreRow(score)) };
   }
 
   private async getGroupContext(friendsGroupId: string) {

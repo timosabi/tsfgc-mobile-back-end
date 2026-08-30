@@ -8,6 +8,7 @@ import {
 } from "./LiveChatGenerator.js";
 import { createRepositories, type Repositories } from "../repositories/index.js";
 import type PushNotificationService from "./PushNotificationService.js";
+import type MatchweekOverviewService from "./MatchweekOverviewService.js";
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
 
 type LiveEventInput = {
@@ -94,7 +95,8 @@ export default class LiveFeedService {
   constructor(
     clientOrRepositories: SupabaseClient<Database> | LiveFeedRepositories,
     private chatGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
-    private pushNotifications?: PushNotificationService
+    private pushNotifications?: PushNotificationService,
+    private matchweekOverview?: Pick<MatchweekOverviewService, "getMatchweekScores">
   ) {
     this.repositories = isLiveFeedRepositories(clientOrRepositories)
       ? clientOrRepositories
@@ -296,15 +298,15 @@ export default class LiveFeedService {
     }
 
     if (input.eventType === "red_card") {
-      const yesUserIds = await this.getRedCardYesUserIds(
-        group.id,
-        fixture.id,
-        submittedUserIds
-      );
+      const [yesUserIds, rankByUserId] = await Promise.all([
+        this.getRedCardYesUserIds(group.id, fixture.id, submittedUserIds),
+        this.getMatchweekRanks(fixture, group.id),
+      ]);
       const yes = new Set(yesUserIds);
       const impacts: PredictionImpact[] = submittedUserIds.map((userId) => ({
         name: profileById.get(userId) ?? "Player",
         change: yes.has(userId) ? "red_card_correct" : "red_card_wrong",
+        rankDisplay: rankByUserId.get(userId) ?? null,
       }));
 
       return {
@@ -325,11 +327,10 @@ export default class LiveFeedService {
       };
     }
 
-    const predictions = await this.getScorePredictions(
-      group.id,
-      fixture.id,
-      submittedUserIds
-    );
+    const [predictions, rankByUserId] = await Promise.all([
+      this.getScorePredictions(group.id, fixture.id, submittedUserIds),
+      this.getMatchweekRanks(fixture, group.id),
+    ]);
     // beforeHome/beforeAway are used both for the per-goal prediction diff below
     // (which specific goal flipped which prediction) and, via afterHome/afterAway,
     // as the displayed `score` for goal events -- for a goal, input.homeScore/
@@ -369,6 +370,7 @@ export default class LiveFeedService {
         change,
         predictedHome: prediction.home_score_prediction,
         predictedAway: prediction.away_score_prediction,
+        rankDisplay: rankByUserId.get(prediction.user_id) ?? null,
       });
     }
 
@@ -432,6 +434,33 @@ export default class LiveFeedService {
     }
 
     return profileById;
+  }
+
+  // Never throws -- a failure here (stale/missing subscription, matchweek
+  // not resolvable, etc.) degrades to "no rank mentions" rather than
+  // breaking live-feed generation for the event, same as the Source A/B
+  // canary above.
+  private async getMatchweekRanks(
+    fixture: FixtureRow,
+    friendsGroupId: string
+  ): Promise<Map<string, string | null>> {
+    const ranks = new Map<string, string | null>();
+    if (!this.matchweekOverview || !fixture.matchweek) return ranks;
+
+    try {
+      const { rows } = await this.matchweekOverview.getMatchweekScores({
+        friendsGroupId,
+        matchweek: fixture.matchweek,
+      });
+      for (const row of rows) ranks.set(row.user_id, row.rank_display ?? null);
+    } catch (error) {
+      console.warn(
+        "[LiveFeed] Failed to load matchweek ranks, omitting from commentary",
+        { friendsGroupId, matchweek: fixture.matchweek, error }
+      );
+    }
+
+    return ranks;
   }
 
   private async getRedCardYesUserIds(
