@@ -136,11 +136,15 @@ export default class LiveFeedService {
     const fixture = await this.getFixture(input);
     if (!fixture) return { created: 0, skipped: true, reason: "fixture_not_found" };
 
-    // Canary: Source A (fixture.live_*_score, provider-authoritative) and Source B
-    // (input.*Score, this event's local replay) should agree by the time an event
-    // is processed. A mismatch here is harmless to what gets persisted/displayed
-    // (Source A always wins, see buildGroupContext/patchFixture), but signals the
-    // replay's own-goal-crediting logic may be diverging from the provider.
+    // Canary: Source A (fixture.live_*_score, from the periodic bulk /livescores
+    // poll) and input.*Score (for goals: SportMonks' own per-event result, see
+    // parseEventResult; otherwise the same Source A value) should usually agree.
+    // A mismatch here doesn't affect what gets displayed for goal events (see
+    // buildGroupContext, which prefers the per-event value as more precise) or
+    // what gets persisted (patchFixture always writes Source A), but is worth
+    // knowing about: it means Source A is lagging behind the per-fixture events
+    // feed for this instant, or (for non-goal events, which don't have their own
+    // per-event score) the own-goal-crediting replay has diverged.
     if (
       input.homeScore != null &&
       input.awayScore != null &&
@@ -326,11 +330,15 @@ export default class LiveFeedService {
       fixture.id,
       submittedUserIds
     );
-    // beforeHome/beforeAway/afterHome/afterAway are ONLY for the per-goal prediction
-    // diff below (which specific goal flipped which prediction) -- they need Source
-    // B's incremental replay delta, which the authoritative aggregate can't provide.
-    // Never surface these as a displayed/persisted score; use fixture.live_*_score
-    // (Source A) for that, as the `score` field below does.
+    // beforeHome/beforeAway are used both for the per-goal prediction diff below
+    // (which specific goal flipped which prediction) and, via afterHome/afterAway,
+    // as the displayed `score` for goal events -- for a goal, input.homeScore/
+    // awayScore is the score SportMonks attached directly to that event (see
+    // LiveEventsPollerService.parseEventResult), which is more precise for "the
+    // score as of this event" than fixture.live_*_score: that DB column is only
+    // as fresh as the last bulk /livescores poll, which can genuinely lag behind
+    // the per-fixture events feed by a tick. fixture.live_*_score is still the
+    // fallback for event types that don't carry their own score (red_card etc.).
     const beforeHome =
       input.beforeHomeScore ?? fixture.live_home_score ?? fixture.home_score ?? 0;
     const beforeAway =
@@ -373,8 +381,8 @@ export default class LiveFeedService {
       matchweek: fixture.matchweek,
       minute: input.minute ?? null,
       score: {
-        home: fixture.live_home_score ?? fixture.home_score ?? afterHome,
-        away: fixture.live_away_score ?? fixture.away_score ?? afterAway,
+        home: afterHome,
+        away: afterAway,
       },
       ...eventDetail,
       impacts,

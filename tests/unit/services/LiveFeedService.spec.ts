@@ -274,14 +274,16 @@ describe("LiveFeedService", () => {
     }
   );
 
-  it("uses the fixture's authoritative live score for commentary, not a stale local replay", async () => {
-    // Reproduces the incident: Source B's replay (input.homeScore/awayScore, e.g.
-    // from a racy goal-history recomputation) says 4-0, but the fixture row --
-    // already corrected by the provider-authoritative bulk /livescores poll
-    // (Source A) -- says 3-1. Commentary must use the corrected value.
+  it("uses the goal event's own score over a stale fixture row, for commentary", async () => {
+    // Reproduces a real incident: a Brighton goal's own SportMonks payload said
+    // "result": "3-1" (parsed upstream into input.homeScore/awayScore by
+    // LiveEventsPollerService.parseEventResult), but the fixture row's
+    // live_*_score columns -- only as fresh as the last bulk /livescores poll --
+    // hadn't caught up yet and still said 3-0. Commentary showed "Brighton
+    // score... 3-0", contradicting itself. The per-event score must win.
     const { chatGenerator, repositories, service } = createService();
     repositories.fixtures.findLiveFeedFixture.mockResolvedValue(
-      liveFixture({ live_home_score: 3, live_away_score: 1 })
+      liveFixture({ live_home_score: 3, live_away_score: 0 })
     );
 
     await service.processEvent({
@@ -289,9 +291,9 @@ describe("LiveFeedService", () => {
       fixtureId: 101,
       smFixtureId: 1101,
       smEventId: 27,
-      minute: 59,
-      homeScore: 4,
-      awayScore: 0,
+      minute: 36,
+      homeScore: 3,
+      awayScore: 1,
     });
 
     expect(chatGenerator.generate).toHaveBeenCalledWith(
@@ -299,10 +301,10 @@ describe("LiveFeedService", () => {
     );
   });
 
-  it("persists the corrected score in the feed row's payload, not the stale replay value", async () => {
+  it("persists the goal event's own score in the feed row's payload, not a stale fixture row", async () => {
     const { repositories, service } = createService();
     repositories.fixtures.findLiveFeedFixture.mockResolvedValue(
-      liveFixture({ live_home_score: 3, live_away_score: 1 })
+      liveFixture({ live_home_score: 3, live_away_score: 0 })
     );
 
     await service.processEvent({
@@ -310,9 +312,9 @@ describe("LiveFeedService", () => {
       fixtureId: 101,
       smFixtureId: 1101,
       smEventId: 27,
-      minute: 59,
-      homeScore: 4,
-      awayScore: 0,
+      minute: 36,
+      homeScore: 3,
+      awayScore: 1,
     });
 
     expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(

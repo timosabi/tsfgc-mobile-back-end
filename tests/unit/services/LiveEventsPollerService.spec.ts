@@ -145,6 +145,65 @@ describe("LiveEventsPollerService", () => {
     );
   });
 
+  it("prefers the event's own payload.result over its own-goal-crediting guess", async () => {
+    // Reproduces a real incident: goalCreditedToHome guessed this own goal
+    // credited the wrong side, but SportMonks' own payload.result ("0-1")
+    // already had the correct answer attached to the event itself.
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {},
+      events: [
+        {
+          event_type: "own_goal",
+          sm_event_id: 9,
+          minute: 40,
+          player_name: "Unlucky Defender",
+          team: "Chelsea",
+          provider_payload: { result: "0-1" },
+        },
+      ],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+
+    expect(deps.liveFeed.processEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homeScore: 0,
+        awayScore: 1,
+      })
+    );
+  });
+
+  it("falls back to its own increment when payload.result is missing or malformed", async () => {
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {},
+      events: [
+        {
+          event_type: "goal",
+          sm_event_id: 10,
+          minute: 22,
+          player_name: "Striker",
+          team: "Arsenal",
+          provider_payload: { result: "not-a-score" },
+        },
+      ],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+
+    expect(deps.liveFeed.processEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homeScore: 1,
+        awayScore: 0,
+      })
+    );
+  });
+
   it("flags own goals and penalties, and passes the assisting player through", async () => {
     const deps = createDeps();
     deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);

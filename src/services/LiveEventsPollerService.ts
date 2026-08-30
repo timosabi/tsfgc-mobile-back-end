@@ -124,6 +124,18 @@ export default class LiveEventsPollerService {
           runningAway += 1;
         }
 
+        // SportMonks embeds the authoritative resulting score directly on the
+        // event itself (payload.result, e.g. "3-1"). Prefer it over our own
+        // increment whenever present -- it's immune both to our own-goal
+        // crediting logic above (goalCreditedToHome has been wrong before)
+        // and to the separately-polled bulk /livescores feed (Source A)
+        // lagging behind the per-fixture events feed for this instant.
+        const authoritative = this.parseEventResult(event.provider_payload);
+        if (authoritative) {
+          runningHome = authoritative.home;
+          runningAway = authoritative.away;
+        }
+
         await this.deps.liveFeed.processEvent({
           eventType,
           smFixtureId: fixture.sm_fixture_id,
@@ -157,6 +169,20 @@ export default class LiveEventsPollerService {
     }
 
     await this.processSyntheticEvents(freshFixture, homeScore, awayScore);
+  }
+
+  private parseEventResult(
+    payload: unknown
+  ): { home: number; away: number } | null {
+    if (!payload || typeof payload !== "object") return null;
+
+    const result = (payload as { result?: unknown }).result;
+    if (typeof result !== "string") return null;
+
+    const match = result.match(/^(\d+)-(\d+)$/);
+    if (!match) return null;
+
+    return { home: Number(match[1]), away: Number(match[2]) };
   }
 
   private goalCreditedToHome(
