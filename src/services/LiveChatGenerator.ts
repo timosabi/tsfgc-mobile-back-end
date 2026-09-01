@@ -42,6 +42,13 @@ export type LiveChatContext = {
     home: number | null;
     away: number | null;
   };
+  // The score immediately BEFORE this event (goal events only) -- without
+  // this, the model has no way to know whether a goal opened the scoring,
+  // extended an existing lead, or leveled things up, and will guess.
+  previousScore?: {
+    home: number | null;
+    away: number | null;
+  } | null;
   player?: string | null;
   assistedBy?: string | null;
   team?: string | null;
@@ -198,6 +205,7 @@ const SYSTEM_PROMPT = `You write live match updates for a friends' football-pred
 Match detail fields (use when present, never invent values not present in the given context):
 - "player": who scored or was red carded. Mention them by name.
 - "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
+- "score" vs "previousScore": compare these before describing the goal's effect on the scoreline. Only say a team "extends"/"restores" their lead if "previousScore" already shows them ahead. If "previousScore" was level (including 0-0), say they "take the lead" or "go ahead" -- never "extend" a lead that didn't exist. If the scoring team was behind in "previousScore" and still is, say they "pull one back" or similar, not "extend" or "take the lead". If "previousScore" is null/absent, don't make any claim about the state of the lead at all.
 - "impacts": an array of { name, change, rankDisplay, rankMovement }. "change" is "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct), "result_gained"/"result_lost" (their plain win/draw/loss result guess just became/stopped being correct -- NOT the exact score), or "red_card_correct" (their red-card pick just hit). These are deliberately the ONLY outcomes worth reporting -- a closest-total-goals shift or a wrong red-card guess is not included in this data at all, so never invent or infer one. A person only ever appears once per event: if their exact score changed, that's reported instead of a separate result_gained/result_lost for the same person.
 - "impacts[].rankDisplay": (exact_gained/exact_lost/red_card_correct only) that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". Use it exactly as given -- never output a "#" or "=" symbol. State it as their current position only, never as a "moved from/to" change. Omit any rank mention if rankDisplay is null/absent.
 - "impacts[].rankMovement": (result_gained/result_lost only) one of "up", "down", or "none" -- whether this specific event actually moved that person in the live matchweek table. Never state a specific rank number or position for a result_gained/result_lost person (no rankDisplay is given for them) -- just convey whether it mattered: "up" reads as something like "up as it stands" or "climbing the table"; "down" as "slipping"/"down as it stands"; "none" as "no meaningful change" / "as it stands". Keep this part short -- a few words, not a full sentence.
@@ -214,6 +222,8 @@ Examples of the tone to match:
 "56' Maguire scores! Molly has hit their exact score, now 1st for the matchweek."
 "62' Red card! Rice sees red. Alex picks up the Red Card bonus!"
 "70' Saka scores! Alex no longer has their exact score."
+"59' Saka scores! Arsenal take the lead." (previousScore was 0-0 -- this is the first goal, not an extended lead)
+"77' Saka scores! Arsenal extend their lead." (previousScore already had Arsenal ahead)
 "59' Saka scores! Molly, Sabi, Alastair and Leo have the result right -- no meaningful change."
 "73' Odegaard scores! Molly and Sabi have the result right, up as it stands."
 "81' Kane scores from the penalty box."

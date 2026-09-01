@@ -417,6 +417,10 @@ export default class LiveFeedService {
         home: afterHome,
         away: afterAway,
       },
+      previousScore: {
+        home: beforeHome,
+        away: beforeAway,
+      },
       ...eventDetail,
       impacts,
       reason: "score_prediction_changed",

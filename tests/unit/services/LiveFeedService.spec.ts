@@ -305,6 +305,30 @@ describe("LiveFeedService", () => {
     );
   });
 
+  it("passes the pre-goal score to the chat generator, so it can tell a lead being taken from a lead being extended", async () => {
+    // Reproduces a real incident: with no previousScore in the context, the
+    // model described the very first goal of a 0-0 game as "Arsenal extend
+    // their lead" -- there was no lead yet to extend.
+    const { chatGenerator, service } = createService();
+
+    await service.processEvent({
+      eventType: "goal",
+      fixtureId: 101,
+      smFixtureId: 1101,
+      smEventId: 27,
+      minute: 27,
+      homeScore: 1,
+      awayScore: 0,
+    });
+
+    expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        score: { home: 1, away: 0 },
+        previousScore: { home: 0, away: 0 },
+      })
+    );
+  });
+
   it("persists the goal event's own score in the feed row's payload, not a stale fixture row", async () => {
     const { repositories, service } = createService();
     repositories.fixtures.findLiveFeedFixture.mockResolvedValue(
