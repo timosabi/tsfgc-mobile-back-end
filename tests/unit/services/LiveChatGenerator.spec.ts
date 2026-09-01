@@ -226,4 +226,66 @@ describe("MockLiveChatGenerator", () => {
 
     expect(message).not.toContain("matchweek");
   });
+
+  it("combines several people's names into one sentence when they all gained the result with no meaningful rank change", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Molly", change: "result_gained", rankMovement: "none" },
+        { name: "Sabi", change: "result_gained", rankMovement: "none" },
+        { name: "Alastair", change: "result_gained", rankMovement: "none" },
+        { name: "Leo", change: "result_gained", rankMovement: "none" },
+      ],
+    });
+
+    expect(message).toContain("Molly, Sabi, Alastair, and Leo have the result right.");
+    expect(message).toContain("No meaningful change.");
+  });
+
+  it("combines exactly two people's names with 'and', no comma", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Molly", change: "result_gained", rankMovement: "up" },
+        { name: "Sabi", change: "result_gained", rankMovement: "up" },
+      ],
+    });
+
+    expect(message).toContain("Molly and Sabi have the result right.");
+    expect(message).toContain("Up as it stands.");
+  });
+
+  it("splits people who gained the result into separate sentences when the rank movement differs", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [
+        { name: "Molly", change: "result_gained", rankMovement: "up" },
+        { name: "Sabi", change: "result_gained", rankMovement: "none" },
+      ],
+    });
+
+    expect(message).not.toContain("Molly and Sabi");
+    expect(message).toContain("Molly has the result right. Up as it stands.");
+    expect(message).toContain("Sabi has the result right. No meaningful change.");
+  });
+
+  it("reports a lost result with a 'down' movement distinctly from 'none'", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [{ name: "Alex", change: "result_lost", rankMovement: "down" }],
+    });
+
+    expect(message).toContain("Alex no longer has the result right.");
+    expect(message).toContain("Down as it stands.");
+  });
+
+  it("never mixes a numeric rank into a result_gained/result_lost sentence", async () => {
+    const message = await new MockLiveChatGenerator().generate({
+      ...context(),
+      impacts: [{ name: "Alex", change: "result_gained", rankMovement: "up", rankDisplay: "1st" }],
+    });
+
+    expect(message).not.toContain("1st");
+    expect(message).not.toContain("matchweek");
+  });
 });

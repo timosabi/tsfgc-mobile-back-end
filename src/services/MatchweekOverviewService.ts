@@ -237,6 +237,11 @@ export default class MatchweekOverviewService {
   async getMatchweekScores(params: {
     friendsGroupId: string;
     matchweek: string;
+    // Lets a caller ask "what would the ranks be if this one fixture's score
+    // were X-Y instead of whatever's currently in the DB" -- used by live
+    // commentary to diff ranks immediately before/after a single goal event,
+    // without waiting on (or racing) the bulk /livescores poll's write.
+    fixtureScoreOverride?: { fixtureId: number; homeScore: number; awayScore: number };
   }): Promise<{ rows: MatchweekScoreRow[] }> {
     const { subscription } = await this.getGroupContext(params.friendsGroupId);
     const allFixtures = await this.getSubscriptionFixtures(subscription);
@@ -245,8 +250,20 @@ export default class MatchweekOverviewService {
     if (!fixtures?.length) {
       throw new AppError("No fixtures found for matchweek", 404);
     }
+    const effectiveFixtures = params.fixtureScoreOverride
+      ? fixtures.map((fixture) =>
+          fixture.id === params.fixtureScoreOverride!.fixtureId
+            ? {
+                ...fixture,
+                status: "live" as const,
+                live_home_score: params.fixtureScoreOverride!.homeScore,
+                live_away_score: params.fixtureScoreOverride!.awayScore,
+              }
+            : fixture
+        )
+      : fixtures;
 
-    const fixtureIds = fixtures.map((fixture) => fixture.id);
+    const fixtureIds = effectiveFixtures.map((fixture) => fixture.id);
     const weekNumber = this.weekNumberFromMatchweek(params.matchweek);
 
     const [submissions, predictions, redCards, persistedScores] = await Promise.all([
@@ -263,7 +280,7 @@ export default class MatchweekOverviewService {
         : this.calculateProvisionalScores({
             friendsGroupId: params.friendsGroupId,
             weekNumber,
-            fixtures,
+            fixtures: effectiveFixtures,
             predictions,
             redCards,
             submittedUserIds,

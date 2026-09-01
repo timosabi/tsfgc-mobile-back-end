@@ -428,9 +428,19 @@ describe("LiveFeedService", () => {
         awayScore: 0,
       });
 
+      // Called twice: once for the score just before this goal, once for
+      // just after, so a result_gained/result_lost impact (not exercised by
+      // this exact-score test) can tell whether the goal actually moved
+      // anyone's rank.
       expect(matchweekOverview.getMatchweekScores).toHaveBeenCalledWith({
         friendsGroupId: "group-1",
         matchweek: "Matchweek 2",
+        fixtureScoreOverride: { fixtureId: 101, homeScore: 0, awayScore: 0 },
+      });
+      expect(matchweekOverview.getMatchweekScores).toHaveBeenCalledWith({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+        fixtureScoreOverride: { fixtureId: 101, homeScore: 1, awayScore: 0 },
       });
       expect(chatGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -521,6 +531,113 @@ describe("LiveFeedService", () => {
         expect.objectContaining({
           impacts: expect.arrayContaining([
             expect.objectContaining({ name: "Alex", rankDisplay: null }),
+          ]),
+        })
+      );
+    });
+  });
+
+  describe("result-guess (win/draw/loss) impacts", () => {
+    it("only reports the exact-score change, never an additional redundant result change, for the same user on the same event", async () => {
+      const { chatGenerator, service } = createService();
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      const context = (chatGenerator.generate as jest.Mock).mock.calls[0][0];
+      expect(context.impacts.map((impact: { change: string }) => impact.change)).toEqual([
+        "exact_gained",
+        "exact_lost",
+      ]);
+    });
+
+    it("reports a result_gained impact, with rank movement, for a non-exact prediction whose result just became correct", async () => {
+      const matchweekOverview = {
+        // Before this goal (0-0, a draw) both users sat tied at rank 2. After
+        // it (1-0, a home win) user-a's now-correct result moves them to
+        // rank 1, while user-b's stays put at rank 2.
+        getMatchweekScores: jest.fn().mockImplementation(
+          ({ fixtureScoreOverride }: { fixtureScoreOverride?: { homeScore: number } }) =>
+            Promise.resolve({
+              rows:
+                fixtureScoreOverride?.homeScore === 1
+                  ? [
+                      { user_id: "user-a", rank: 1, rank_display: "#1" },
+                      { user_id: "user-b", rank: 2, rank_display: "#2" },
+                    ]
+                  : [
+                      { user_id: "user-a", rank: 2, rank_display: "#2" },
+                      { user_id: "user-b", rank: 2, rank_display: "#2" },
+                    ],
+            })
+        ),
+      };
+      const { chatGenerator, repositories, service } = createService(
+        undefined,
+        matchweekOverview
+      );
+      repositories.predictions.listScorePredictionsByGroupFixture.mockResolvedValue([
+        { user_id: "user-a", fixture_id: 101, home_score_prediction: 3, away_score_prediction: 0 },
+        { user_id: "user-b", fixture_id: 101, home_score_prediction: 2, away_score_prediction: 0 },
+      ]);
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          impacts: expect.arrayContaining([
+            expect.objectContaining({
+              name: "Alex",
+              change: "result_gained",
+              rankMovement: "up",
+            }),
+            expect.objectContaining({
+              name: "Bianca",
+              change: "result_gained",
+              rankMovement: "none",
+            }),
+          ]),
+        })
+      );
+    });
+
+    it("reports a result_lost impact when a later goal turns a correct result incorrect", async () => {
+      const { chatGenerator, repositories, service } = createService();
+      repositories.predictions.listScorePredictionsByGroupFixture.mockResolvedValue([
+        { user_id: "user-a", fixture_id: 101, home_score_prediction: 2, away_score_prediction: 0 },
+      ]);
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 28,
+        minute: 89,
+        beforeHomeScore: 1,
+        beforeAwayScore: 0,
+        homeScore: 1,
+        awayScore: 1,
+      });
+
+      expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          impacts: expect.arrayContaining([
+            expect.objectContaining({ name: "Alex", change: "result_lost" }),
           ]),
         })
       );

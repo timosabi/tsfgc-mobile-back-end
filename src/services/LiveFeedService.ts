@@ -323,10 +323,6 @@ export default class LiveFeedService {
       };
     }
 
-    const [predictions, rankByUserId] = await Promise.all([
-      this.getScorePredictions(group.id, fixture.id, submittedUserIds),
-      this.getMatchweekRanks(fixture, group.id),
-    ]);
     // beforeHome/beforeAway are used both for the per-goal prediction diff below
     // (which specific goal flipped which prediction) and, via afterHome/afterAway,
     // as the displayed `score` for goal events -- for a goal, input.homeScore/
@@ -342,24 +338,70 @@ export default class LiveFeedService {
       input.beforeAwayScore ?? fixture.live_away_score ?? fixture.away_score ?? 0;
     const afterHome = input.homeScore ?? beforeHome;
     const afterAway = input.awayScore ?? beforeAway;
+
+    // ranksBefore/ranksAfter are both computed against explicit score
+    // overrides (rather than trusting fixture.live_*_score to already reflect
+    // "after") so the rank-movement diff below can't be thrown off by the
+    // bulk /livescores poll writing in between these two calls.
+    const [predictions, ranksBefore, ranksAfter] = await Promise.all([
+      this.getScorePredictions(group.id, fixture.id, submittedUserIds),
+      this.getMatchweekRanksDetailed(fixture, group.id, {
+        fixtureId: fixture.id,
+        homeScore: beforeHome,
+        awayScore: beforeAway,
+      }),
+      this.getMatchweekRanksDetailed(fixture, group.id, {
+        fixtureId: fixture.id,
+        homeScore: afterHome,
+        awayScore: afterAway,
+      }),
+    ]);
     const impacts: PredictionImpact[] = [];
 
     for (const prediction of predictions) {
-      // Only an exact-score flip is worth a chat mention -- a merely-correct
-      // result or a closest-total-goals shift isn't compelling enough to
-      // surface in the live feed.
+      // An exact-score flip is the most specific, most compelling outcome --
+      // report it and move on, rather than also reporting the (necessarily
+      // also-true) result-correctness flip for the same person this tick.
       const wasExact =
         prediction.home_score_prediction === beforeHome &&
         prediction.away_score_prediction === beforeAway;
       const isExact =
         prediction.home_score_prediction === afterHome &&
         prediction.away_score_prediction === afterAway;
-      if (wasExact === isExact) continue;
+      if (wasExact !== isExact) {
+        impacts.push({
+          name: profileById.get(prediction.user_id) ?? "Player",
+          change: isExact ? "exact_gained" : "exact_lost",
+          rankDisplay: ranksAfter.get(prediction.user_id)?.rankDisplay ?? null,
+        });
+        continue;
+      }
+
+      // Otherwise, a plain result (win/draw/loss) flip is still worth a
+      // mention -- e.g. a goal that turns a draw into a home win instantly
+      // makes everyone who predicted any home-win scoreline "right", even if
+      // none of them have the exact score.
+      const wasCorrectResult =
+        this.resultSign(prediction.home_score_prediction, prediction.away_score_prediction) ===
+        this.resultSign(beforeHome, beforeAway);
+      const isCorrectResult =
+        this.resultSign(prediction.home_score_prediction, prediction.away_score_prediction) ===
+        this.resultSign(afterHome, afterAway);
+      if (wasCorrectResult === isCorrectResult) continue;
+
+      const beforeRank = ranksBefore.get(prediction.user_id)?.rank ?? null;
+      const afterRank = ranksAfter.get(prediction.user_id)?.rank ?? null;
+      const rankMovement: "up" | "down" | "none" =
+        beforeRank == null || afterRank == null || beforeRank === afterRank
+          ? "none"
+          : afterRank < beforeRank
+            ? "up"
+            : "down";
 
       impacts.push({
         name: profileById.get(prediction.user_id) ?? "Player",
-        change: isExact ? "exact_gained" : "exact_lost",
-        rankDisplay: rankByUserId.get(prediction.user_id) ?? null,
+        change: isCorrectResult ? "result_gained" : "result_lost",
+        rankMovement,
       });
     }
 
@@ -417,16 +459,35 @@ export default class LiveFeedService {
     fixture: FixtureRow,
     friendsGroupId: string
   ): Promise<Map<string, string | null>> {
+    const detailed = await this.getMatchweekRanksDetailed(fixture, friendsGroupId);
     const ranks = new Map<string, string | null>();
+    for (const [userId, info] of detailed) ranks.set(userId, info.rankDisplay);
+    return ranks;
+  }
+
+  // Same graceful-degradation contract as getMatchweekRanks, but also
+  // exposes the raw numeric rank (for before/after movement comparisons) and
+  // accepts an optional score override so a caller can ask for ranks as of a
+  // hypothetical score rather than whatever's currently persisted.
+  private async getMatchweekRanksDetailed(
+    fixture: FixtureRow,
+    friendsGroupId: string,
+    fixtureScoreOverride?: { fixtureId: number; homeScore: number; awayScore: number }
+  ): Promise<Map<string, { rank: number | null; rankDisplay: string | null }>> {
+    const ranks = new Map<string, { rank: number | null; rankDisplay: string | null }>();
     if (!this.matchweekOverview || !fixture.matchweek) return ranks;
 
     try {
       const { rows } = await this.matchweekOverview.getMatchweekScores({
         friendsGroupId,
         matchweek: fixture.matchweek,
+        fixtureScoreOverride,
       });
       for (const row of rows) {
-        ranks.set(row.user_id, this.formatRankDisplay(row.rank_display));
+        ranks.set(row.user_id, {
+          rank: row.rank ?? null,
+          rankDisplay: this.formatRankDisplay(row.rank_display),
+        });
       }
     } catch (error) {
       console.warn(
@@ -436,6 +497,12 @@ export default class LiveFeedService {
     }
 
     return ranks;
+  }
+
+  private resultSign(home: number, away: number): "home" | "away" | "draw" {
+    if (home > away) return "home";
+    if (away > home) return "away";
+    return "draw";
   }
 
   // Converts MatchweekOverviewService's raw rank_display ("#1", "=2") into a

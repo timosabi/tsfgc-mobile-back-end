@@ -1,13 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-// Only exact-score and red-card outcomes are compelling enough for the live
-// feed -- a merely-correct result or a closest-total-goals shift isn't. And
-// for red cards specifically, only a correct guess is worth mentioning: a
-// group member whose single matchweek red-card pick was for some other
-// fixture isn't meaningfully "wrong" just because a card happened here.
+// Exact-score and red-card outcomes, plus a plain correct/incorrect RESULT
+// guess (win/draw/loss, not the exact score), are the only outcomes worth
+// surfacing in the live feed -- a closest-total-goals shift isn't. A
+// result_gained/result_lost impact is only emitted for a person whose exact-
+// score status did NOT also change on the same event (see LiveFeedService) --
+// otherwise the more specific exact_gained/exact_lost already says it. For
+// red cards specifically, only a correct guess is worth mentioning: a group
+// member whose single matchweek red-card pick was for some other fixture
+// isn't meaningfully "wrong" just because a card happened here.
 export type PredictionChangeType =
   | "exact_gained"
   | "exact_lost"
+  | "result_gained"
+  | "result_lost"
   | "red_card_correct";
 
 export type PredictionImpact = {
@@ -17,6 +23,11 @@ export type PredictionImpact = {
   // "#1" (outright) or "=2" (tied) -- the same rank_display shown on the
   // Matchweek Standings page. Never a raw number. Null/absent when unknown.
   rankDisplay?: string | null;
+  // result_gained/result_lost only: whether THIS event's rank recalculation
+  // actually moved this person in the live matchweek table ("up"/"down") or
+  // left them where they were ("none") -- lets commentary distinguish "this
+  // mattered" from "everyone already had this coming".
+  rankMovement?: "up" | "down" | "none";
 };
 
 export type LiveChatContext = {
@@ -47,6 +58,7 @@ export interface LiveChatGenerator {
 type ImpactGroup = {
   change: PredictionChangeType;
   rankDisplay?: string | null;
+  rankMovement?: "up" | "down" | "none";
   names: string[];
 };
 
@@ -103,10 +115,19 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
     const groups = new Map<string, ImpactGroup>();
 
     for (const impact of impacts) {
-      const key = `${impact.change}:${impact.rankDisplay ?? ""}`;
+      const isResultChange =
+        impact.change === "result_gained" || impact.change === "result_lost";
+      // Result changes group by whether the rank move was actually meaningful
+      // (up/down/none), not the exact rank value -- several people can share
+      // "no meaningful change" while sitting at different ranks. Everything
+      // else keeps grouping by the exact current rank, as before.
+      const key = isResultChange
+        ? `${impact.change}:${impact.rankMovement ?? "none"}`
+        : `${impact.change}:${impact.rankDisplay ?? ""}`;
       const group = groups.get(key) ?? {
         change: impact.change,
         rankDisplay: impact.rankDisplay,
+        rankMovement: impact.rankMovement,
         names: [],
       };
       group.names.push(impact.name);
@@ -126,6 +147,10 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
           return `${names} ${plural ? "have" : "has"} hit their exact score!`;
         case "exact_lost":
           return `${names} ${plural ? "no longer have" : "no longer has"} their exact score.`;
+        case "result_gained":
+          return `${names} ${plural ? "have" : "has"} the result right.`;
+        case "result_lost":
+          return `${names} ${plural ? "no longer have" : "no longer has"} the result right.`;
         case "red_card_correct":
           return `${names} ${plural ? "pick up" : "picks up"} the Red Card bonus!`;
         default:
@@ -133,7 +158,11 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
       }
     })();
 
-    return base ? `${base}${this.rankClause(group)}` : "";
+    if (!base) return "";
+
+    const isResultChange =
+      group.change === "result_gained" || group.change === "result_lost";
+    return `${base}${isResultChange ? this.movementClause(group) : this.rankClause(group)}`;
   }
 
   // group.rankDisplay is already a plain phrase ("1st", "tied for 2nd") by
@@ -144,6 +173,17 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
     const names = this.joinNames(group.names);
     const plural = group.names.length > 1;
     return ` ${names} ${plural ? "are" : "is"} now ${group.rankDisplay} for the matchweek.`;
+  }
+
+  private movementClause(group: ImpactGroup): string {
+    switch (group.rankMovement) {
+      case "up":
+        return " Up as it stands.";
+      case "down":
+        return " Down as it stands.";
+      default:
+        return " No meaningful change.";
+    }
   }
 
   private joinNames(names: string[]): string {
@@ -158,12 +198,14 @@ const SYSTEM_PROMPT = `You write live match updates for a friends' football-pred
 Match detail fields (use when present, never invent values not present in the given context):
 - "player": who scored or was red carded. Mention them by name.
 - "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
-- "impacts": an array of { name, change, rankDisplay }. "change" is "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct) or "red_card_correct" (their red-card pick just hit). These are deliberately the ONLY outcomes worth reporting -- a merely-correct result, a closest-total-goals shift, or a wrong red-card guess is not included in this data at all, so never invent or infer one.
-- "impacts[].rankDisplay": that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". Use it exactly as given -- never output a "#" or "=" symbol. State it as their current position only, never as a "moved from/to" change (only the current rank is known here). Omit any rank mention if rankDisplay is null/absent.
+- "impacts": an array of { name, change, rankDisplay, rankMovement }. "change" is "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct), "result_gained"/"result_lost" (their plain win/draw/loss result guess just became/stopped being correct -- NOT the exact score), or "red_card_correct" (their red-card pick just hit). These are deliberately the ONLY outcomes worth reporting -- a closest-total-goals shift or a wrong red-card guess is not included in this data at all, so never invent or infer one. A person only ever appears once per event: if their exact score changed, that's reported instead of a separate result_gained/result_lost for the same person.
+- "impacts[].rankDisplay": (exact_gained/exact_lost/red_card_correct only) that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". Use it exactly as given -- never output a "#" or "=" symbol. State it as their current position only, never as a "moved from/to" change. Omit any rank mention if rankDisplay is null/absent.
+- "impacts[].rankMovement": (result_gained/result_lost only) one of "up", "down", or "none" -- whether this specific event actually moved that person in the live matchweek table. Never state a specific rank number or position for a result_gained/result_lost person (no rankDisplay is given for them) -- just convey whether it mattered: "up" reads as something like "up as it stands" or "climbing the table"; "down" as "slipping"/"down as it stands"; "none" as "no meaningful change" / "as it stands". Keep this part short -- a few words, not a full sentence.
+- When several people in "impacts" share the exact same change (and, for result_gained/result_lost, the same rankMovement), combine their names into ONE sentence rather than repeating a sentence per person -- e.g. "Molly, Sabi, Alastair and Leo have the result right -- no meaningful change." (comma-separated, "and" before the last name). Only split into separate sentences when the change or outcome genuinely differs between people.
 
 Rules:
 - Output ONLY the message text. No quotes, no markdown, no preamble.
-- Be brief. State what happened in the match in one short clause (e.g. "Maguire scores!", "Rice sees red."), then a separate short clause per person in "impacts". Do not add a plain score-recap sentence after a goal (e.g. never a standalone "Team A 2-1 Team B." sentence) -- the fixture and score are already shown elsewhere in the app.
+- Be brief. State what happened in the match in one short clause (e.g. "Maguire scores!", "Rice sees red."), then a separate short clause per distinct outcome in "impacts" (combining names as above). Do not add a plain score-recap sentence after a goal (e.g. never a standalone "Team A 2-1 Team B." sentence) -- the fixture and score are already shown elsewhere in the app.
 - Never invent stats, names, scorelines, or reactions not present in the given context.
 - If "impacts" is empty, just report the match event -- nothing more.
 - A "fulltime" event marks the end of ONLY that one fixture, and should still state that fixture's final score. A matchweek has many fixtures, often spread across several days -- never say or imply that the matchweek itself has ended, is complete, or is over.
@@ -172,6 +214,8 @@ Examples of the tone to match:
 "56' Maguire scores! Molly has hit their exact score, now 1st for the matchweek."
 "62' Red card! Rice sees red. Alex picks up the Red Card bonus!"
 "70' Saka scores! Alex no longer has their exact score."
+"59' Saka scores! Molly, Sabi, Alastair and Leo have the result right -- no meaningful change."
+"73' Odegaard scores! Molly and Sabi have the result right, up as it stands."
 "81' Kane scores from the penalty box."
 "45' Own goal from Gabriel."
 "90' Full time in Chelsea vs Arsenal 2-1."`;

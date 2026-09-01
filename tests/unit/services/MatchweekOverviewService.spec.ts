@@ -359,6 +359,57 @@ describe("MatchweekOverviewService", () => {
       expect(repositories.profiles.listPreviewsByIds).not.toHaveBeenCalled();
       expect(repositories.liveFeedEvents.listByGroupMatchweek).not.toHaveBeenCalled();
     });
+
+    it("recomputes ranks against a fixtureScoreOverride instead of the fixture's persisted live score", async () => {
+      const { repositories, service } = createService([
+        // DB still shows 0-0 (as if the bulk /livescores poll hasn't caught
+        // up yet) -- the override lets a caller ask "what if it were 1-0".
+        overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z", {
+          live_home_score: 0,
+          live_away_score: 0,
+        }),
+      ]);
+      repositories.predictions.listByGroupFixtures.mockResolvedValue([
+        predictionRow("user-a", 201, 1, 0),
+        predictionRow("user-b", 201, 0, 0),
+      ]);
+
+      const { rows } = await service.getMatchweekScores({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+        fixtureScoreOverride: { fixtureId: 201, homeScore: 1, awayScore: 0 },
+      });
+
+      expect(rows.find((row) => row.user_id === "user-a")).toMatchObject({
+        exact_score_points: 2,
+        rank: 1,
+      });
+      expect(rows.find((row) => row.user_id === "user-b")).toMatchObject({
+        exact_score_points: 0,
+      });
+    });
+
+    it("ignores fixtureScoreOverride for a fixture ID that isn't in this matchweek", async () => {
+      const { repositories, service } = createService([
+        overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z", {
+          live_home_score: 0,
+          live_away_score: 0,
+        }),
+      ]);
+      repositories.predictions.listByGroupFixtures.mockResolvedValue([
+        predictionRow("user-a", 201, 1, 0),
+      ]);
+
+      const { rows } = await service.getMatchweekScores({
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+        fixtureScoreOverride: { fixtureId: 999, homeScore: 1, awayScore: 0 },
+      });
+
+      expect(rows.find((row) => row.user_id === "user-a")).toMatchObject({
+        exact_score_points: 0,
+      });
+    });
   });
 });
 
