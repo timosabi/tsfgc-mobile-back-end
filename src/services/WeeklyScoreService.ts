@@ -28,6 +28,7 @@ type LeaderboardRow = {
   total_goals_bonus: number;
   red_card_bonus: number;
   weeks_played: number;
+  week_wins: number;
   rank?: number;
   rank_display?: string;
 };
@@ -280,6 +281,7 @@ export default class WeeklyScoreService {
       total_goals_bonus: 0,
       red_card_bonus: 0,
       weeks_played: 0,
+      week_wins: 0,
     });
 
     const totals = new Map<string, LeaderboardRow>();
@@ -298,6 +300,34 @@ export default class WeeklyScoreService {
       row.red_card_bonus += score.red_card_bonus;
       row.weeks_played += 1;
       totals.set(score.user_id, row);
+    }
+
+    // weekly_scores has no per-week rank column -- the only way to know how
+    // many individual matchweeks a user finished #1 in is to rank each week's
+    // rows ourselves, same tie rule as everywhere else in this codebase (a
+    // tie is decided on points_earned alone; the other fields only break the
+    // sort order, they don't un-tie a shared rank -- see the season sort
+    // below and MatchweekOverviewService.rankScores).
+    const weeks = new Map<number, typeof scores>();
+    for (const score of scores ?? []) {
+      const week = weeks.get(score.week_number) ?? [];
+      week.push(score);
+      weeks.set(score.week_number, week);
+    }
+    for (const weekScores of weeks.values()) {
+      const sorted = [...weekScores].sort((a, b) => {
+        if (b.points_earned !== a.points_earned) return b.points_earned - a.points_earned;
+        if (b.exact_score_points !== a.exact_score_points) {
+          return b.exact_score_points - a.exact_score_points;
+        }
+        return b.correct_result_points - a.correct_result_points;
+      });
+      const topPoints = sorted[0]?.points_earned;
+      for (const score of sorted) {
+        if (score.points_earned !== topPoints) break;
+        const row = totals.get(score.user_id);
+        if (row) row.week_wins += 1;
+      }
     }
 
     const rows = Array.from(totals.values()).sort((a, b) => {

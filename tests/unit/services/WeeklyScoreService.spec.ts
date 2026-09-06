@@ -222,6 +222,72 @@ describe("WeeklyScoreService", () => {
       ["user-d", 2, 0],
     ]);
     expect(leaderboard[1].profile?.display_name).toBe("Dana");
+    // user-a is the only one with a week-1 row, so they trivially "win" it;
+    // user-d has no weekly_scores rows at all and never wins any.
+    expect(leaderboard.map((row) => [row.user_id, row.week_wins])).toEqual([
+      ["user-a", 1],
+      ["user-d", 0],
+    ]);
+  });
+
+  it("credits a week win to whoever finishes #1 in each individual matchweek", async () => {
+    const { repositories, service } = createService();
+
+    repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([
+      // Week 1: user-a wins outright.
+      weeklyScoreRow("score-a-1", "user-a", 1, 10, 10),
+      weeklyScoreRow("score-b-1", "user-b", 1, 5, 5),
+      // Week 2: user-b wins outright.
+      weeklyScoreRow("score-a-2", "user-a", 2, 3, 13),
+      weeklyScoreRow("score-b-2", "user-b", 2, 8, 13),
+    ]);
+    repositories.friendsGroupUsers.listMembers.mockResolvedValue([
+      { user_id: "user-a", joined_at: "2026-01-01T00:00:00Z", role: "owner" },
+      { user_id: "user-b", joined_at: "2026-01-01T00:00:00Z", role: "member" },
+    ]);
+    repositories.profiles.listPreviewsByIds.mockResolvedValue([
+      { id: "user-a", display_name: "Alex", avatar_emoji: "A", color_class: "blue" },
+      { id: "user-b", display_name: "Bianca", avatar_emoji: "B", color_class: "green" },
+    ]);
+
+    const leaderboard = await service.getLeaderboard("group-1");
+
+    expect(leaderboard.map((row) => [row.user_id, row.week_wins])).toEqual(
+      expect.arrayContaining([
+        ["user-a", 1],
+        ["user-b", 1],
+      ])
+    );
+  });
+
+  it("credits a week win to everyone tied for #1 in that week, even with different exact-score points", async () => {
+    const { repositories, service } = createService();
+
+    repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([
+      weeklyScoreRow("score-a-1", "user-a", 1, 10, 10, { exact_score_points: 2 }),
+      weeklyScoreRow("score-b-1", "user-b", 1, 10, 10, { exact_score_points: 4 }),
+      weeklyScoreRow("score-c-1", "user-c", 1, 5, 5),
+    ]);
+    repositories.friendsGroupUsers.listMembers.mockResolvedValue([
+      { user_id: "user-a", joined_at: "2026-01-01T00:00:00Z", role: "member" },
+      { user_id: "user-b", joined_at: "2026-01-01T00:00:00Z", role: "member" },
+      { user_id: "user-c", joined_at: "2026-01-01T00:00:00Z", role: "owner" },
+    ]);
+    repositories.profiles.listPreviewsByIds.mockResolvedValue([
+      { id: "user-a", display_name: "Alex", avatar_emoji: "A", color_class: "blue" },
+      { id: "user-b", display_name: "Bianca", avatar_emoji: "B", color_class: "green" },
+      { id: "user-c", display_name: "Chris", avatar_emoji: "C", color_class: "pink" },
+    ]);
+
+    const leaderboard = await service.getLeaderboard("group-1");
+
+    expect(leaderboard.map((row) => [row.user_id, row.week_wins])).toEqual(
+      expect.arrayContaining([
+        ["user-a", 1],
+        ["user-b", 1],
+        ["user-c", 0],
+      ])
+    );
   });
 
   it("returns an empty leaderboard for a group with no members", async () => {
