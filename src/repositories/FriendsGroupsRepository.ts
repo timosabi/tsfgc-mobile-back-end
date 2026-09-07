@@ -103,4 +103,16 @@ export default class FriendsGroupsRepository extends BaseRepository<"friends_gro
     this.throwOnError(error, "friends_groups listAllApproved failed");
     return (data ?? []) as FriendsGroupInviteRow[];
   }
+
+  async findActiveOwnedByUserId(
+    userId: string
+  ): Promise<Array<Pick<TableRow<"friends_groups">, "id" | "name">>> {
+    const { data, error } = await this.table()
+      .select("id, name")
+      .eq("created_by", userId)
+      .in("status", ["pending", "approved"]);
+
+    this.throwOnError(error, "friends_groups findActiveOwnedByUserId failed");
+    return (data ?? []) as Array<Pick<TableRow<"friends_groups">, "id" | "name">>;
+  }
 }

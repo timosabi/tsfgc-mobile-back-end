@@ -72,4 +72,10 @@ export default class NotificationSubscriptionsRepository extends BaseRepository<
 
     this.throwOnError(error, "notification_subscriptions deactivateByEndpoints failed");
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "notification_subscriptions deleteByUserId failed");
+  }
 }

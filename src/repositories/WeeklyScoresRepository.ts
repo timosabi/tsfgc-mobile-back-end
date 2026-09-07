@@ -101,4 +101,10 @@ export default class WeeklyScoresRepository extends BaseRepository<"weekly_score
 
     return rows;
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "weekly_scores deleteByUserId failed");
+  }
 }

@@ -127,4 +127,10 @@ export default class FriendsGroupJoinRequestsRepository extends BaseRepository<"
     this.throwOnError(error, "friends_group_join_requests updateStatus failed");
     return data as Pick<TableRow<"friends_group_join_requests">, "id" | "friends_group_id" | "user_id" | "status">;
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "friends_group_join_requests deleteByUserId failed");
+  }
 }

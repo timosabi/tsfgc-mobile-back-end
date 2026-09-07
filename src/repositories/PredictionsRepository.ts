@@ -88,4 +88,10 @@ export default class PredictionsRepository extends BaseRepository<"predictions">
 
     this.throwOnError(error, "predictions deleteByUserGroupFixtures failed");
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "predictions deleteByUserId failed");
+  }
 }

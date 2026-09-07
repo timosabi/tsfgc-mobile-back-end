@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import type { User } from "@supabase/supabase-js";
 import AuthService from "../services/AuthService.js";
+import AccountDeletionService from "../services/AccountDeletionService.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
 
 export default class AuthController {
@@ -198,6 +199,12 @@ export default class AuthController {
     if (targetId && targetId !== user.id) {
       throw new AppError("You can only delete your own account", 403);
     }
+
+    const { currentPassword } = req.body ?? {};
+    await this.assertCurrentPassword(auth, user, currentPassword);
+
+    const accountDeletion = new AccountDeletionService(auth.client);
+    await accountDeletion.deleteAccount(user.id);
 
     const { error } = await auth.deleteUserAsAdmin(user.id);
     if (error) throw new AppError(error.message, 500);

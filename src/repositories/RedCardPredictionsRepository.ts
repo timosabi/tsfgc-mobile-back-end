@@ -97,4 +97,10 @@ export default class RedCardPredictionsRepository extends BaseRepository<"red_ca
       "red_card_predictions deleteByUserGroupFixtures failed"
     );
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "red_card_predictions deleteByUserId failed");
+  }
 }

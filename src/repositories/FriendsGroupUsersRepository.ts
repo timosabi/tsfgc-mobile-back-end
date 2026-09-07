@@ -152,4 +152,10 @@ export default class FriendsGroupUsersRepository extends BaseRepository<"friends
     this.throwOnError(error, "friends_group_users listOwnedGroupIdsForUser failed");
     return (data ?? []).map((row) => row.friends_group_id as string);
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "friends_group_users deleteByUserId failed");
+  }
 }

@@ -78,4 +78,10 @@ export default class UserSubmissionsRepository extends BaseRepository<"user_subm
 
     this.throwOnError(error, "user_submissions deleteByUserGroupMatchweek failed");
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    const { error } = await this.table().delete().eq("user_id", userId);
+
+    this.throwOnError(error, "user_submissions deleteByUserId failed");
+  }
 }
