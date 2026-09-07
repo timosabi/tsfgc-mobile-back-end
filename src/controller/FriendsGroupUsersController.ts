@@ -29,6 +29,7 @@ export default class FriendsGroupUsersController {
       "/:friendsGroupId/transfer-ownership",
       asyncHandler(this.transferOwnership)
     );
+    this.router.delete("/:friendsGroupId", asyncHandler(this.deleteGroup));
 
     this.router.get("/me/groups", asyncHandler(this.getFriendsGroupsForUser));
   }
@@ -153,6 +154,23 @@ export default class FriendsGroupUsersController {
     if (!friendsGroupId) throw new AppError("friendsGroupId is required", 400);
 
     const data = await friendsGroupUsers.getOwnerMemberList({
+      friendsGroupId,
+      ownerUserId: user.id,
+    });
+
+    return res.status(200).json({ data });
+  };
+
+  deleteGroup = async (req: Request, res: Response) => {
+    const { auth, friendsGroupUsers } = this.createServices(req, res);
+
+    const user = await auth.requireApprovedUser();
+    if (!user) throw new AppError("Unauthorized", 401);
+
+    const { friendsGroupId } = req.params;
+    if (!friendsGroupId) throw new AppError("friendsGroupId is required", 400);
+
+    const data = await friendsGroupUsers.deleteGroup({
       friendsGroupId,
       ownerUserId: user.id,
     });

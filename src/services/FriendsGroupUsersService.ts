@@ -330,6 +330,21 @@ export default class FriendsGroupUsersService {
     return this.repositories.friendsGroupUsers.listGroupRefsForUser(userId);
   }
 
+  // A genuine, permanent delete -- distinct from archiveById's soft-delete.
+  // friends_groups.id cascades via FK to friends_group_users, predictions,
+  // red_card_predictions, user_submissions, weekly_scores, live_feed_events,
+  // notification_subscriptions, friends_group_join_requests, and
+  // friends_group_subscriptions, so this single call removes every row tied
+  // to this group across the schema without any manual cleanup.
+  async deleteGroup(params: {
+    friendsGroupId: string;
+    ownerUserId: string;
+  }): Promise<{ status: "deleted"; friendsGroupId: string }> {
+    await this.requireOwner(params.friendsGroupId, params.ownerUserId);
+    await this.repositories.friendsGroups.deleteById(params.friendsGroupId);
+    return { status: "deleted", friendsGroupId: params.friendsGroupId };
+  }
+
   private async requireOwner(
     friendsGroupId: string,
     userId: string

@@ -38,9 +38,9 @@ function createService() {
     friendsGroups: createRepositoryMock<
       Pick<
         Repositories["friendsGroups"],
-        "archiveById" | "findById" | "transferOwnership"
+        "archiveById" | "deleteById" | "findById" | "transferOwnership"
       >
-    >(["archiveById", "findById", "transferOwnership"]),
+    >(["archiveById", "deleteById", "findById", "transferOwnership"]),
     profiles: createRepositoryMock<
       Pick<
         Repositories["profiles"],
@@ -501,6 +501,76 @@ describe("FriendsGroupUsersService", () => {
         newOwnerUserId: "missing-member",
       })
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("lets the owner permanently delete their group", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.findMembership.mockResolvedValue({
+      id: "owner-membership",
+      friends_group_id: "group-1",
+      user_id: "owner-a",
+      role: "owner",
+      joined_at: "2026-05-14T00:00:00.000Z",
+    });
+    repositories.friendsGroups.findById.mockResolvedValue({
+      id: "group-1",
+      created_by: "owner-a",
+      status: "approved",
+    } as Awaited<ReturnType<Repositories["friendsGroups"]["findById"]>>);
+
+    await expect(
+      service.deleteGroup({
+        friendsGroupId: "group-1",
+        ownerUserId: "owner-a",
+      })
+    ).resolves.toEqual({ status: "deleted", friendsGroupId: "group-1" });
+
+    expect(repositories.friendsGroups.deleteById).toHaveBeenCalledWith("group-1");
+  });
+
+  it("blocks a non-owner from deleting the group", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.findMembership.mockResolvedValue({
+      id: "member-membership",
+      friends_group_id: "group-1",
+      user_id: "member-a",
+      role: "member",
+      joined_at: "2026-05-14T00:00:00.000Z",
+    });
+
+    await expect(
+      service.deleteGroup({
+        friendsGroupId: "group-1",
+        ownerUserId: "member-a",
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(repositories.friendsGroups.deleteById).not.toHaveBeenCalled();
+  });
+
+  it("blocks deleting a group that isn't approved (e.g. already archived)", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.findMembership.mockResolvedValue({
+      id: "owner-membership",
+      friends_group_id: "group-1",
+      user_id: "owner-a",
+      role: "owner",
+      joined_at: "2026-05-14T00:00:00.000Z",
+    });
+    repositories.friendsGroups.findById.mockResolvedValue({
+      id: "group-1",
+      created_by: "owner-a",
+      status: "archived",
+    } as Awaited<ReturnType<Repositories["friendsGroups"]["findById"]>>);
+
+    await expect(
+      service.deleteGroup({
+        friendsGroupId: "group-1",
+        ownerUserId: "owner-a",
+      })
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    expect(repositories.friendsGroups.deleteById).not.toHaveBeenCalled();
   });
 
 });
