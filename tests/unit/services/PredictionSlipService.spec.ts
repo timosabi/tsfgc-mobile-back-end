@@ -50,6 +50,9 @@ function createService(fixtures = futureFixtures) {
     friendsGroupSubscriptions: createRepositoryMock<
       Pick<Repositories["friendsGroupSubscriptions"], "findActiveByFriendsGroup">
     >(["findActiveByFriendsGroup"]),
+    friendsGroupUsers: createRepositoryMock<
+      Pick<Repositories["friendsGroupUsers"], "listForUser">
+    >(["listForUser"]),
     liveFeedEvents: createRepositoryMock<
       Pick<Repositories["liveFeedEvents"], "listByGroupMatchweekWithFixture">
     >(["listByGroupMatchweekWithFixture"]),
@@ -91,11 +94,15 @@ function createService(fixtures = futureFixtures) {
     >(["listByGroupPaginated", "listByGroupWeek"]),
   };
 
-  repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockResolvedValue({
-    friends_group_id: "group-1",
-    provider_league_id: 8,
-    provider_season_id: 23614,
-  });
+  repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockImplementation(
+    async (friendsGroupId: string) => {
+      if (friendsGroupId === "group-1") {
+        return { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 };
+      }
+      return null;
+    }
+  );
+  repositories.friendsGroupUsers.listForUser.mockResolvedValue([]);
   repositories.fixtures.listMatchweekFixtures.mockResolvedValue(fixtures);
   repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
   repositories.predictions.listByGroupFixturesUsers.mockResolvedValue([]);
@@ -260,18 +267,272 @@ describe("PredictionSlipService", () => {
     expect(afterLock.users.find((user) => user.userId === "user-b")?.predictions).toHaveLength(1);
     expect(afterLock.users.find((user) => user.userId === "user-b")?.redCardFixtureId).toBe(102);
   });
+
+  it("getMine reports no import suggestion when no other matching-group submission exists", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-2", "Group Two", "approved"),
+    ]);
+    repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (friendsGroupId === "group-1") {
+          return { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        if (friendsGroupId === "group-2") {
+          return { friends_group_id: "group-2", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        return null;
+      }
+    );
+    repositories.userSubmissions.findByUserGroupMatchweek.mockResolvedValue(null);
+
+    const result = await service.getMine({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 2",
+    });
+
+    expect(result.importSuggestion).toBeNull();
+  });
+
+  it("getMine surfaces the matching group's submission as an import suggestion", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-2", "Group Two", "approved"),
+    ]);
+    repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (friendsGroupId === "group-1") {
+          return { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        if (friendsGroupId === "group-2") {
+          return { friends_group_id: "group-2", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        return null;
+      }
+    );
+    repositories.userSubmissions.findByUserGroupMatchweek.mockImplementation(
+      async (_userId: string, friendsGroupId: string) => {
+        if (friendsGroupId === "group-2") {
+          return { id: "sub-group-2", user_id: "user-a", friends_group_id: "group-2", matchweek: "Matchweek 2", submitted_at: "2099-08-01T10:00:00Z" };
+        }
+        return null;
+      }
+    );
+
+    const result = await service.getMine({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 2",
+    });
+
+    expect(result.importSuggestion).toEqual({
+      friendsGroupId: "group-2",
+      friendsGroupName: "Group Two",
+      submittedAt: "2099-08-01T10:00:00Z",
+    });
+  });
+
+  it("getMine picks the most recently submitted among multiple matching groups", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-2", "Group Two", "approved"),
+      membershipRow("group-3", "Group Three", "approved"),
+    ]);
+    repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (["group-1", "group-2", "group-3"].includes(friendsGroupId)) {
+          return { friends_group_id: friendsGroupId, provider_league_id: 8, provider_season_id: 23614 };
+        }
+        return null;
+      }
+    );
+    repositories.userSubmissions.findByUserGroupMatchweek.mockImplementation(
+      async (_userId: string, friendsGroupId: string) => {
+        if (friendsGroupId === "group-2") {
+          return { id: "sub-group-2", user_id: "user-a", friends_group_id: "group-2", matchweek: "Matchweek 2", submitted_at: "2099-08-01T10:00:00Z" };
+        }
+        if (friendsGroupId === "group-3") {
+          return { id: "sub-group-3", user_id: "user-a", friends_group_id: "group-3", matchweek: "Matchweek 2", submitted_at: "2099-08-02T10:00:00Z" };
+        }
+        return null;
+      }
+    );
+
+    const result = await service.getMine({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 2",
+    });
+
+    expect(result.importSuggestion?.friendsGroupId).toBe("group-3");
+  });
+
+  it("getMine ignores a matching-group submission from a different competition/season", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-2", "Group Two", "approved"),
+    ]);
+    repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (friendsGroupId === "group-1") {
+          return { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        if (friendsGroupId === "group-2") {
+          return { friends_group_id: "group-2", provider_league_id: 82, provider_season_id: 99999 };
+        }
+        return null;
+      }
+    );
+    repositories.userSubmissions.findByUserGroupMatchweek.mockResolvedValue({
+      id: "sub-group-2",
+      user_id: "user-a",
+      friends_group_id: "group-2",
+      matchweek: "Matchweek 2",
+      submitted_at: "2099-08-01T10:00:00Z",
+    });
+
+    const result = await service.getMine({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 2",
+    });
+
+    expect(result.importSuggestion).toBeNull();
+  });
+
+  it("getMine has no import suggestion once the current group already has a submission", async () => {
+    const { repositories, service } = createService();
+    repositories.userSubmissions.findByUserGroupMatchweek.mockImplementation(
+      async (_userId: string, friendsGroupId: string) => {
+        if (friendsGroupId === "group-1") {
+          return { id: "sub-group-1", user_id: "user-a", friends_group_id: "group-1", matchweek: "Matchweek 2", submitted_at: "2099-08-01T10:00:00Z" };
+        }
+        return null;
+      }
+    );
+
+    const result = await service.getMine({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 2",
+    });
+
+    expect(result.importSuggestion).toBeNull();
+    expect(repositories.friendsGroupUsers.listForUser).not.toHaveBeenCalled();
+  });
+
+  it("importMine copies the latest matching group's slip into the current group", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-2", "Group Two", "approved"),
+    ]);
+    repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (friendsGroupId === "group-1") {
+          return { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        if (friendsGroupId === "group-2") {
+          return { friends_group_id: "group-2", provider_league_id: 8, provider_season_id: 23614 };
+        }
+        return null;
+      }
+    );
+    repositories.userSubmissions.findByUserGroupMatchweek.mockImplementation(
+      async (_userId: string, friendsGroupId: string) => {
+        if (friendsGroupId === "group-2") {
+          return { id: "sub-group-2", user_id: "user-a", friends_group_id: "group-2", matchweek: "Matchweek 2", submitted_at: "2099-08-01T10:00:00Z" };
+        }
+        return null;
+      }
+    );
+    repositories.predictions.listByGroupFixturesUsers.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (friendsGroupId === "group-2") {
+          return [predictionRow("user-a", 101, 2, 1, "group-2"), predictionRow("user-a", 102, 0, 0, "group-2")];
+        }
+        return [];
+      }
+    );
+    repositories.redCardPredictions.listByGroupFixturesUsers.mockImplementation(
+      async (friendsGroupId: string) => {
+        if (friendsGroupId === "group-2") {
+          return [redCardRow("user-a", 101, "group-2")];
+        }
+        return [];
+      }
+    );
+
+    const result = await service.importMine({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "Matchweek 2",
+    });
+
+    expect(repositories.predictions.deleteByUserGroupFixtures).toHaveBeenCalledWith(
+      "user-a",
+      "group-1",
+      [101, 102]
+    );
+    expect(repositories.predictions.insertPredictions).toHaveBeenCalledWith([
+      expect.objectContaining({ user_id: "user-a", friends_group_id: "group-1", fixture_id: 101, home_score_prediction: 2, away_score_prediction: 1 }),
+      expect.objectContaining({ user_id: "user-a", friends_group_id: "group-1", fixture_id: 102, home_score_prediction: 0, away_score_prediction: 0 }),
+    ]);
+    expect(repositories.redCardPredictions.insertPrediction).toHaveBeenCalledWith({
+      user_id: "user-a",
+      friends_group_id: "group-1",
+      fixture_id: 101,
+    });
+    expect(repositories.userSubmissions.upsertSubmission).toHaveBeenCalledWith(
+      expect.objectContaining({ user_id: "user-a", friends_group_id: "group-1", matchweek: "Matchweek 2" })
+    );
+    expect(result.friendsGroupId).toBe("group-1");
+  });
+
+  it("importMine rejects when no previous guesses exist to import", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([]);
+
+    await expect(
+      service.importMine({
+        userId: "user-a",
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      })
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    expect(repositories.predictions.insertPredictions).not.toHaveBeenCalled();
+  });
+
+  it("importMine rejects once the matchweek has started", async () => {
+    const { repositories, service } = createService(lockedFixtures);
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-2", "Group Two", "approved"),
+    ]);
+
+    await expect(
+      service.importMine({
+        userId: "user-a",
+        friendsGroupId: "group-1",
+        matchweek: "Matchweek 2",
+      })
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(repositories.predictions.insertPredictions).not.toHaveBeenCalled();
+  });
 });
 
 function predictionRow(
   userId: string,
   fixtureId: number,
   homeScore: number,
-  awayScore: number
+  awayScore: number,
+  friendsGroupId = "group-1"
 ): PredictionRow {
   return {
     id: `${userId}-${fixtureId}`,
     user_id: userId,
-    friends_group_id: "group-1",
+    friends_group_id: friendsGroupId,
     fixture_id: fixtureId,
     home_score_prediction: homeScore,
     away_score_prediction: awayScore,
@@ -280,12 +541,34 @@ function predictionRow(
   };
 }
 
-function redCardRow(userId: string, fixtureId: number): RedCardPredictionRow {
+function redCardRow(
+  userId: string,
+  fixtureId: number,
+  friendsGroupId = "group-1"
+): RedCardPredictionRow {
   return {
     id: `red-${userId}-${fixtureId}`,
     user_id: userId,
-    friends_group_id: "group-1",
+    friends_group_id: friendsGroupId,
     fixture_id: fixtureId,
     created_at: "2099-08-01T10:00:00Z",
+  };
+}
+
+function membershipRow(friendsGroupId: string, name: string, status: string) {
+  return {
+    role: "member" as const,
+    joined_at: "2099-08-01T10:00:00Z",
+    friends_group: {
+      id: friendsGroupId,
+      name,
+      slug: friendsGroupId,
+      created_by: "user-owner",
+      invite_token: `invite-${friendsGroupId}`,
+      is_open: false,
+      status,
+      created_at: "2099-08-01T10:00:00Z",
+      updated_at: "2099-08-01T10:00:00Z",
+    },
   };
 }

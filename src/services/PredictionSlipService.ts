@@ -16,6 +16,7 @@ type PredictionSlipRepositories = Pick<
   Repositories,
   | "fixtures"
   | "friendsGroupSubscriptions"
+  | "friendsGroupUsers"
   | "liveFeedEvents"
   | "predictions"
   | "profiles"
@@ -23,6 +24,12 @@ type PredictionSlipRepositories = Pick<
   | "userSubmissions"
   | "weeklyScores"
 >;
+
+export type ImportSuggestion = {
+  friendsGroupId: string;
+  friendsGroupName: string;
+  submittedAt: string;
+};
 
 export type PredictionSlipInput = {
   predictions: Array<{
@@ -56,6 +63,14 @@ export default class PredictionSlipService {
       this.getSubmission(params.userId, params.friendsGroupId, params.matchweek),
     ]);
 
+    const importSuggestion = submission
+      ? null
+      : await this.findLatestMatchingSubmission(
+          params.userId,
+          params.friendsGroupId,
+          params.matchweek
+        );
+
     return {
       friendsGroupId: params.friendsGroupId,
       matchweek: params.matchweek,
@@ -64,6 +79,7 @@ export default class PredictionSlipService {
       fixtures,
       predictions,
       redCardFixtureId: redCards[0]?.fixture_id ?? null,
+      importSuggestion,
     };
   }
 
@@ -158,6 +174,113 @@ export default class PredictionSlipService {
     });
 
     return this.getMine(params);
+  }
+
+  async importMine(params: {
+    userId: string;
+    friendsGroupId: string;
+    matchweek: string;
+  }) {
+    const fixtures = await this.getMatchweekFixtures(params.friendsGroupId, params.matchweek);
+    this.assertEditable(fixtures);
+    const fixtureIds = fixtures.map((fixture) => fixture.id);
+
+    const match = await this.findLatestMatchingSubmission(
+      params.userId,
+      params.friendsGroupId,
+      params.matchweek
+    );
+    if (!match) {
+      throw new AppError("No previous guesses found to import", 404);
+    }
+
+    const [predictions, redCards] = await Promise.all([
+      this.getPredictions(match.friendsGroupId, fixtureIds, [params.userId]),
+      this.getRedCards(match.friendsGroupId, fixtureIds, [params.userId]),
+    ]);
+
+    if (predictions.length !== fixtures.length || redCards.length !== 1) {
+      throw new AppError("Previous guesses are incomplete for this matchweek", 409);
+    }
+
+    await this.deleteSlipRows(params.userId, params.friendsGroupId, fixtureIds);
+
+    await this.repositories.predictions.insertPredictions(
+      predictions.map((prediction) => ({
+        user_id: params.userId,
+        friends_group_id: params.friendsGroupId,
+        fixture_id: prediction.fixture_id,
+        home_score_prediction: prediction.home_score_prediction,
+        away_score_prediction: prediction.away_score_prediction,
+        updated_at: new Date().toISOString(),
+      }))
+    );
+
+    await this.repositories.redCardPredictions.insertPrediction({
+      user_id: params.userId,
+      friends_group_id: params.friendsGroupId,
+      fixture_id: redCards[0].fixture_id,
+    });
+
+    await this.repositories.userSubmissions.upsertSubmission({
+      user_id: params.userId,
+      friends_group_id: params.friendsGroupId,
+      matchweek: params.matchweek,
+      submitted_at: new Date().toISOString(),
+    });
+
+    return this.getMine(params);
+  }
+
+  private async findLatestMatchingSubmission(
+    userId: string,
+    friendsGroupId: string,
+    matchweek: string
+  ): Promise<ImportSuggestion | null> {
+    const targetSubscription =
+      await this.repositories.friendsGroupSubscriptions.findActiveByFriendsGroup(
+        friendsGroupId
+      );
+    if (!targetSubscription) return null;
+
+    const memberships = await this.repositories.friendsGroupUsers.listForUser(userId);
+    const candidates = memberships.filter(
+      (membership) => membership.friends_group.id !== friendsGroupId
+    );
+
+    let best: ImportSuggestion | null = null;
+
+    for (const candidate of candidates) {
+      const candidateGroupId = candidate.friends_group.id;
+      const candidateSubscription =
+        await this.repositories.friendsGroupSubscriptions.findActiveByFriendsGroup(
+          candidateGroupId
+        );
+      if (
+        !candidateSubscription ||
+        candidateSubscription.provider_league_id !== targetSubscription.provider_league_id ||
+        candidateSubscription.provider_season_id !== targetSubscription.provider_season_id
+      ) {
+        continue;
+      }
+
+      const submission = await this.repositories.userSubmissions.findByUserGroupMatchweek(
+        userId,
+        candidateGroupId,
+        matchweek
+      );
+      if (!submission) continue;
+
+      if (!best || submission.submitted_at > best.submittedAt) {
+        best = {
+          friendsGroupId: candidateGroupId,
+          friendsGroupName: candidate.friends_group.name,
+          submittedAt: submission.submitted_at,
+        };
+      }
+    }
+
+    return best;
   }
 
   async deleteMine(params: {
@@ -402,5 +525,10 @@ export default class PredictionSlipService {
 function isPredictionSlipRepositories(
   value: SupabaseClient<Database> | PredictionSlipRepositories
 ): value is PredictionSlipRepositories {
-  return "fixtures" in value && "predictions" in value && "userSubmissions" in value;
+  return (
+    "fixtures" in value &&
+    "predictions" in value &&
+    "userSubmissions" in value &&
+    "friendsGroupUsers" in value
+  );
 }

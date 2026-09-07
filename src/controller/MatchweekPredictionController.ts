@@ -31,6 +31,10 @@ export default class MatchweekPredictionController {
       "/:friendsGroupId/matchweeks/:matchweek/predictions/mine/submit",
       asyncHandler(this.submitMine)
     );
+    this.router.post(
+      "/:friendsGroupId/matchweeks/:matchweek/predictions/mine/import",
+      asyncHandler(this.importMine)
+    );
     this.router.delete(
       "/:friendsGroupId/matchweeks/:matchweek/predictions/mine",
       asyncHandler(this.deleteMine)
@@ -102,6 +106,15 @@ export default class MatchweekPredictionController {
     const { friendsGroupId, matchweek } = req.params;
     await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
     const data = await slip.submitMine({ userId: user.id, friendsGroupId, matchweek });
+    res.json({ data });
+  };
+
+  importMine = async (req: Request, res: Response) => {
+    const { auth, slip, friendsGroupUsers } = this.createServices(req, res);
+    const user = await auth.requireApprovedUser();
+    const { friendsGroupId, matchweek } = req.params;
+    await this.requireMember(friendsGroupUsers, friendsGroupId, user.id);
+    const data = await slip.importMine({ userId: user.id, friendsGroupId, matchweek });
     res.json({ data });
   };
 
