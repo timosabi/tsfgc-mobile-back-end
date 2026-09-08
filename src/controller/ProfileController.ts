@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import AuthService from "../services/AuthService.js";
 import ProfileService from "../services/ProfileService.js";
+import PlayerStatsService from "../services/PlayerStatsService.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../integrations/supabase/types.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
@@ -11,14 +12,16 @@ export default class ProfileController {
   constructor() {
     this.router.get("/id", asyncHandler(this.getProfile));
     this.router.put("/id", asyncHandler(this.updateProfile));
+    this.router.get("/id/stats", asyncHandler(this.getStats));
   }
 
   private createServices(req: Request, res: Response) {
     const auth = AuthService.forRequest(req, res);
     const client = auth.client as SupabaseClient<Database>;
     const profile = new ProfileService(client);
+    const playerStats = new PlayerStatsService(client);
 
-    return { auth, profile };
+    return { auth, profile, playerStats };
   }
 
   getProfile = async (req: Request, res: Response) => {
@@ -66,6 +69,16 @@ export default class ProfileController {
     });
 
     return res.status(200).json({ message: "Profile updated successfully" });
+  };
+
+  getStats = async (req: Request, res: Response) => {
+    const { auth, playerStats } = this.createServices(req, res);
+    const user = await auth.requireApprovedUser();
+    if (!user) throw new AppError("Unauthorized", 401);
+
+    const data = await playerStats.getMyStats(user.id);
+
+    return res.json({ data });
   };
 
 }

@@ -226,6 +226,17 @@ export default class FixturesRepository extends BaseRepository<"fixtures"> {
     return (data ?? []) as Array<Pick<TableRow<"fixtures">, "matchweek" | "match_time">>;
   }
 
+  async listByIds(fixtureIds: number[]): Promise<FixtureScoreRow[]> {
+    if (!fixtureIds.length) return [];
+
+    const { data, error } = await this.table()
+      .select("id, home_score, away_score, has_red_card")
+      .in("id", fixtureIds);
+
+    this.throwOnError(error, "fixtures listByIds failed");
+    return (data ?? []) as unknown as FixtureScoreRow[];
+  }
+
   async listFinishedIdsAndMatchweeks(): Promise<Array<Pick<TableRow<"fixtures">, "id" | "matchweek">>> {
     const { data, error } = await this.table()
       .select("id, matchweek")

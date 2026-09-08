@@ -94,4 +94,35 @@ export default class PredictionsRepository extends BaseRepository<"predictions">
 
     this.throwOnError(error, "predictions deleteByUserId failed");
   }
+
+  async listByUserId(
+    userId: string
+  ): Promise<
+    Array<
+      Pick<
+        TableRow<"predictions">,
+        | "fixture_id"
+        | "home_score_prediction"
+        | "away_score_prediction"
+        | "friends_group_id"
+        | "updated_at"
+      >
+    >
+  > {
+    const { data, error } = await this.table()
+      .select("fixture_id, home_score_prediction, away_score_prediction, friends_group_id, updated_at")
+      .eq("user_id", userId);
+
+    this.throwOnError(error, "predictions listByUserId failed");
+    return (data ?? []) as unknown as Array<
+      Pick<
+        TableRow<"predictions">,
+        | "fixture_id"
+        | "home_score_prediction"
+        | "away_score_prediction"
+        | "friends_group_id"
+        | "updated_at"
+      >
+    >;
+  }
 }

@@ -103,4 +103,19 @@ export default class RedCardPredictionsRepository extends BaseRepository<"red_ca
 
     this.throwOnError(error, "red_card_predictions deleteByUserId failed");
   }
+
+  async listByUserId(
+    userId: string
+  ): Promise<
+    Array<Pick<TableRow<"red_card_predictions">, "fixture_id" | "friends_group_id" | "created_at">>
+  > {
+    const { data, error } = await this.table()
+      .select("fixture_id, friends_group_id, created_at")
+      .eq("user_id", userId);
+
+    this.throwOnError(error, "red_card_predictions listByUserId failed");
+    return (data ?? []) as unknown as Array<
+      Pick<TableRow<"red_card_predictions">, "fixture_id" | "friends_group_id" | "created_at">
+    >;
+  }
 }
