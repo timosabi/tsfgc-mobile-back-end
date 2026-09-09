@@ -18,6 +18,7 @@ export type WinStreak = {
   length: number;
   friendsGroupId: string | null;
   friendsGroupName: string | null;
+  weeks: number[];
 };
 
 export type PlayerStats = {
@@ -25,13 +26,18 @@ export type PlayerStats = {
   trend: "up" | "down" | "flat" | null;
   accuracy: number;
   exactScoreCount: number;
+  exactScoreWeeks: number[];
   correctResultCount: number;
+  correctResultWeeks: number[];
   totalFixturesPredicted: number;
   weeksWon: number;
+  weeksWonWeeks: number[];
   winStreak: WinStreak;
   timesLastPlace: number;
+  lastPlaceWeeks: number[];
   redCardGuessesTotal: number;
   redCardGuessesCorrect: number;
+  redCardWeeks: number[];
   redCardAccuracy: number;
 };
 
@@ -49,7 +55,14 @@ export default class PlayerStatsService {
 
     let weeksWon = 0;
     let timesLastPlace = 0;
-    let bestWinStreak: WinStreak = { length: 0, friendsGroupId: null, friendsGroupName: null };
+    let bestWinStreak: WinStreak = {
+      length: 0,
+      friendsGroupId: null,
+      friendsGroupName: null,
+      weeks: [],
+    };
+    const weeksWonWeeks = new Set<number>();
+    const lastPlaceWeeks = new Set<number>();
 
     const currentWindowScores: number[] = [];
     const previousWindowScores: number[] = [];
@@ -70,6 +83,7 @@ export default class PlayerStatsService {
       const weekNumbers = [...weekMap.keys()].sort((a, b) => a - b);
 
       let currentStreak = 0;
+      let currentStreakWeeks: number[] = [];
       let previousWeekNumber: number | null = null;
 
       for (const weekNumber of weekNumbers) {
@@ -81,15 +95,35 @@ export default class PlayerStatsService {
         const isWin = Boolean(userRow) && userRow!.points_earned === topPoints;
         const isLast = Boolean(userRow) && userRow!.points_earned === bottomPoints;
 
-        if (isWin) weeksWon += 1;
-        if (isLast) timesLastPlace += 1;
+        if (isWin) {
+          weeksWon += 1;
+          weeksWonWeeks.add(weekNumber);
+        }
+        if (isLast) {
+          timesLastPlace += 1;
+          lastPlaceWeeks.add(weekNumber);
+        }
 
         const isConsecutiveWithPrevious =
           previousWeekNumber !== null && weekNumber === previousWeekNumber + 1;
-        currentStreak = isWin ? (isConsecutiveWithPrevious ? currentStreak + 1 : 1) : 0;
+
+        if (isWin) {
+          currentStreak = isConsecutiveWithPrevious ? currentStreak + 1 : 1;
+          currentStreakWeeks = isConsecutiveWithPrevious
+            ? [...currentStreakWeeks, weekNumber]
+            : [weekNumber];
+        } else {
+          currentStreak = 0;
+          currentStreakWeeks = [];
+        }
 
         if (currentStreak > bestWinStreak.length) {
-          bestWinStreak = { length: currentStreak, friendsGroupId, friendsGroupName };
+          bestWinStreak = {
+            length: currentStreak,
+            friendsGroupId,
+            friendsGroupName,
+            weeks: [...currentStreakWeeks],
+          };
         }
 
         previousWeekNumber = weekNumber;
@@ -145,12 +179,14 @@ export default class PlayerStatsService {
       ]),
     ];
 
-    const fixtures = await this.repositories.fixtures.listByIds(fixtureIds);
+    const fixtures = await this.repositories.fixtures.listByIdsWithMatchweek(fixtureIds);
     const fixtureById = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
 
     let exactScoreCount = 0;
     let correctResultCount = 0;
     let totalFixturesPredicted = 0;
+    const exactScoreWeeks = new Set<number>();
+    const correctResultWeeks = new Set<number>();
 
     for (const prediction of dedupedPredictions) {
       const fixture = fixtureById.get(prediction.fixture_id);
@@ -166,20 +202,32 @@ export default class PlayerStatsService {
         prediction.away_score_prediction
       );
       const actualSign = resultSign(fixture.home_score, fixture.away_score);
+      const weekNumber = weekNumberFromMatchweek(fixture.matchweek);
 
-      if (isExact) exactScoreCount += 1;
-      if (isExact || predictedSign === actualSign) correctResultCount += 1;
+      if (isExact) {
+        exactScoreCount += 1;
+        if (weekNumber > 0) exactScoreWeeks.add(weekNumber);
+      }
+      if (isExact || predictedSign === actualSign) {
+        correctResultCount += 1;
+        if (weekNumber > 0) correctResultWeeks.add(weekNumber);
+      }
     }
 
     let redCardGuessesTotal = 0;
     let redCardGuessesCorrect = 0;
+    const redCardWeeks = new Set<number>();
 
     for (const pick of dedupedRedCards) {
       const fixture = fixtureById.get(pick.fixture_id);
       if (!fixture || fixture.home_score === null || fixture.away_score === null) continue;
 
       redCardGuessesTotal += 1;
-      if (fixture.has_red_card) redCardGuessesCorrect += 1;
+      if (fixture.has_red_card) {
+        redCardGuessesCorrect += 1;
+        const weekNumber = weekNumberFromMatchweek(fixture.matchweek);
+        if (weekNumber > 0) redCardWeeks.add(weekNumber);
+      }
     }
 
     const accuracy = totalFixturesPredicted ? correctResultCount / totalFixturesPredicted : 0;
@@ -190,13 +238,18 @@ export default class PlayerStatsService {
       trend,
       accuracy,
       exactScoreCount,
+      exactScoreWeeks: [...exactScoreWeeks].sort((a, b) => a - b),
       correctResultCount,
+      correctResultWeeks: [...correctResultWeeks].sort((a, b) => a - b),
       totalFixturesPredicted,
       weeksWon,
+      weeksWonWeeks: [...weeksWonWeeks].sort((a, b) => a - b),
       winStreak: bestWinStreak,
       timesLastPlace,
+      lastPlaceWeeks: [...lastPlaceWeeks].sort((a, b) => a - b),
       redCardGuessesTotal,
       redCardGuessesCorrect,
+      redCardWeeks: [...redCardWeeks].sort((a, b) => a - b),
       redCardAccuracy,
     };
   }
@@ -231,6 +284,15 @@ function resultSign(home: number, away: number): "H" | "A" | "D" {
   if (home > away) return "H";
   if (home < away) return "A";
   return "D";
+}
+
+// Mirrors the same regex-extraction logic independently duplicated in
+// WeeklyScoreService and MatchweekOverviewService -- fixtures.matchweek is a
+// free-text string ("Matchweek 7"), not a numeric column.
+function weekNumberFromMatchweek(matchweek: string | null): number {
+  if (!matchweek) return 0;
+  const n = Number(matchweek.match(/\d+/)?.[0]);
+  return Number.isInteger(n) && n > 0 ? n : 0;
 }
 
 // The same real guess can exist as one row per friends group (submitted

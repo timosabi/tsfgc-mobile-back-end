@@ -19,14 +19,16 @@ function createService() {
     redCardPredictions: createRepositoryMock<
       Pick<Repositories["redCardPredictions"], "listByUserId">
     >(["listByUserId"]),
-    fixtures: createRepositoryMock<Pick<Repositories["fixtures"], "listByIds">>(["listByIds"]),
+    fixtures: createRepositoryMock<Pick<Repositories["fixtures"], "listByIdsWithMatchweek">>([
+      "listByIdsWithMatchweek",
+    ]),
   };
 
   repositories.friendsGroupUsers.listForUser.mockResolvedValue([]);
   repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([]);
   repositories.predictions.listByUserId.mockResolvedValue([]);
   repositories.redCardPredictions.listByUserId.mockResolvedValue([]);
-  repositories.fixtures.listByIds.mockResolvedValue([]);
+  repositories.fixtures.listByIdsWithMatchweek.mockResolvedValue([]);
 
   return {
     repositories,
@@ -100,8 +102,14 @@ function redCardRow(fixtureId: number, friendsGroupId: string, createdAt: string
   return { fixture_id: fixtureId, friends_group_id: friendsGroupId, created_at: createdAt };
 }
 
-function fixtureRow(id: number, homeScore: number | null, awayScore: number | null, hasRedCard = false) {
-  return { id, home_score: homeScore, away_score: awayScore, has_red_card: hasRedCard };
+function fixtureRow(
+  id: number,
+  homeScore: number | null,
+  awayScore: number | null,
+  hasRedCard = false,
+  matchweek: string | null = null
+) {
+  return { id, home_score: homeScore, away_score: awayScore, has_red_card: hasRedCard, matchweek };
 }
 
 describe("PlayerStatsService", () => {
@@ -115,13 +123,17 @@ describe("PlayerStatsService", () => {
       predictionRow(101, "group-1", 2, 1, "2099-08-01T10:00:00Z"),
       predictionRow(101, "group-2", 2, 1, "2099-08-01T11:00:00Z"),
     ]);
-    repositories.fixtures.listByIds.mockResolvedValue([fixtureRow(101, 2, 1)]);
+    repositories.fixtures.listByIdsWithMatchweek.mockResolvedValue([
+      fixtureRow(101, 2, 1, false, "Matchweek 3"),
+    ]);
 
     const result = await service.getMyStats("user-a");
 
     expect(result.exactScoreCount).toBe(1);
     expect(result.correctResultCount).toBe(1);
     expect(result.totalFixturesPredicted).toBe(1);
+    expect(result.exactScoreWeeks).toEqual([3]);
+    expect(result.correctResultWeeks).toEqual([3]);
   });
 
   it("counts two different correctly-guessed fixtures across two groups without over-deduplicating", async () => {
@@ -130,7 +142,7 @@ describe("PlayerStatsService", () => {
       predictionRow(101, "group-1", 2, 1, "2099-08-01T10:00:00Z"),
       predictionRow(102, "group-2", 0, 0, "2099-08-01T10:00:00Z"),
     ]);
-    repositories.fixtures.listByIds.mockResolvedValue([
+    repositories.fixtures.listByIdsWithMatchweek.mockResolvedValue([
       fixtureRow(101, 2, 1),
       fixtureRow(102, 0, 0),
     ]);
@@ -168,6 +180,7 @@ describe("PlayerStatsService", () => {
     const result = await service.getMyStats("user-a");
 
     expect(result.weeksWon).toBe(2);
+    expect(result.weeksWonWeeks).toEqual([1]);
   });
 
   it("resets the win streak on a non-#1 week and on a gap in week_number, reporting the right group", async () => {
@@ -195,6 +208,7 @@ describe("PlayerStatsService", () => {
       length: 2,
       friendsGroupId: "group-1",
       friendsGroupName: "Group One",
+      weeks: [1, 2],
     });
   });
 
@@ -225,6 +239,7 @@ describe("PlayerStatsService", () => {
     const result = await service.getMyStats("user-a");
 
     expect(result.timesLastPlace).toBe(2);
+    expect(result.lastPlaceWeeks).toEqual([1]);
   });
 
   it("deduplicates a red-card guess submitted to multiple groups for the same fixture", async () => {
@@ -233,13 +248,16 @@ describe("PlayerStatsService", () => {
       redCardRow(201, "group-1", "2099-08-01T10:00:00Z"),
       redCardRow(201, "group-2", "2099-08-01T11:00:00Z"),
     ]);
-    repositories.fixtures.listByIds.mockResolvedValue([fixtureRow(201, 1, 1, true)]);
+    repositories.fixtures.listByIdsWithMatchweek.mockResolvedValue([
+      fixtureRow(201, 1, 1, true, "Matchweek 5"),
+    ]);
 
     const result = await service.getMyStats("user-a");
 
     expect(result.redCardGuessesTotal).toBe(1);
     expect(result.redCardGuessesCorrect).toBe(1);
     expect(result.redCardAccuracy).toBe(1);
+    expect(result.redCardWeeks).toEqual([5]);
   });
 
   it("excludes unfinished fixtures from the accuracy denominator", async () => {
@@ -248,7 +266,7 @@ describe("PlayerStatsService", () => {
       predictionRow(101, "group-1", 2, 1, "2099-08-01T10:00:00Z"),
       predictionRow(102, "group-1", 1, 1, "2099-08-01T10:00:00Z"),
     ]);
-    repositories.fixtures.listByIds.mockResolvedValue([
+    repositories.fixtures.listByIdsWithMatchweek.mockResolvedValue([
       fixtureRow(101, 2, 1),
       fixtureRow(102, null, null),
     ]);
@@ -431,14 +449,40 @@ describe("PlayerStatsService", () => {
       trend: null,
       accuracy: 0,
       exactScoreCount: 0,
+      exactScoreWeeks: [],
       correctResultCount: 0,
+      correctResultWeeks: [],
       totalFixturesPredicted: 0,
       weeksWon: 0,
-      winStreak: { length: 0, friendsGroupId: null, friendsGroupName: null },
+      weeksWonWeeks: [],
+      winStreak: { length: 0, friendsGroupId: null, friendsGroupName: null, weeks: [] },
       timesLastPlace: 0,
+      lastPlaceWeeks: [],
       redCardGuessesTotal: 0,
       redCardGuessesCorrect: 0,
+      redCardWeeks: [],
       redCardAccuracy: 0,
     });
+  });
+
+  it("excludes a fixture with a null or unparseable matchweek from the week arrays without crashing", async () => {
+    const { repositories, service } = createService();
+    repositories.predictions.listByUserId.mockResolvedValue([
+      predictionRow(101, "group-1", 2, 1, "2099-08-01T10:00:00Z"),
+    ]);
+    repositories.redCardPredictions.listByUserId.mockResolvedValue([
+      redCardRow(101, "group-1", "2099-08-01T10:00:00Z"),
+    ]);
+    repositories.fixtures.listByIdsWithMatchweek.mockResolvedValue([
+      fixtureRow(101, 2, 1, true, null),
+    ]);
+
+    const result = await service.getMyStats("user-a");
+
+    expect(result.exactScoreCount).toBe(1);
+    expect(result.exactScoreWeeks).toEqual([]);
+    expect(result.correctResultWeeks).toEqual([]);
+    expect(result.redCardGuessesCorrect).toBe(1);
+    expect(result.redCardWeeks).toEqual([]);
   });
 });

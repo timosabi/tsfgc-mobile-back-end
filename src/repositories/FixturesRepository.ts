@@ -21,6 +21,11 @@ export type FixtureScoreRow = Pick<
   "id" | "home_score" | "away_score" | "has_red_card"
 >;
 
+export type FixtureWeekRow = Pick<
+  TableRow<"fixtures">,
+  "id" | "home_score" | "away_score" | "has_red_card" | "matchweek"
+>;
+
 export type OverviewFixtureRow = Pick<
   TableRow<"fixtures">,
   | "id"
@@ -235,6 +240,17 @@ export default class FixturesRepository extends BaseRepository<"fixtures"> {
 
     this.throwOnError(error, "fixtures listByIds failed");
     return (data ?? []) as unknown as FixtureScoreRow[];
+  }
+
+  async listByIdsWithMatchweek(fixtureIds: number[]): Promise<FixtureWeekRow[]> {
+    if (!fixtureIds.length) return [];
+
+    const { data, error } = await this.table()
+      .select("id, home_score, away_score, has_red_card, matchweek")
+      .in("id", fixtureIds);
+
+    this.throwOnError(error, "fixtures listByIdsWithMatchweek failed");
+    return (data ?? []) as unknown as FixtureWeekRow[];
   }
 
   async listFinishedIdsAndMatchweeks(): Promise<Array<Pick<TableRow<"fixtures">, "id" | "matchweek">>> {
