@@ -95,10 +95,16 @@ export default class PlayerStatsService {
         previousWeekNumber = weekNumber;
       }
 
-      const recentWeekNumbers = weekNumbers.slice(-GSCORE_WINDOW_SIZE);
+      // "Previous window" is the current window shifted back by exactly one
+      // week (mostly overlapping, swapping the oldest week for the newest),
+      // not a second non-overlapping block -- that would need 12 finished
+      // weeks to ever produce a trend at all, which is never true early in a
+      // season. Shifting by one week only needs 2 finished weeks total.
+      const windowSize = Math.min(GSCORE_WINDOW_SIZE, weekNumbers.length);
+      const recentWeekNumbers = weekNumbers.slice(weekNumbers.length - windowSize);
       const priorWeekNumbers = weekNumbers.slice(
-        Math.max(0, weekNumbers.length - GSCORE_WINDOW_SIZE * 2),
-        Math.max(0, weekNumbers.length - GSCORE_WINDOW_SIZE)
+        Math.max(0, weekNumbers.length - windowSize - 1),
+        Math.max(0, weekNumbers.length - 1)
       );
 
       for (const weekNumber of recentWeekNumbers) {

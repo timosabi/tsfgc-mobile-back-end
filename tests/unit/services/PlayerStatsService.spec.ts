@@ -378,20 +378,47 @@ describe("PlayerStatsService", () => {
     expect(result.gScore).toBeGreaterThan(0);
   });
 
-  it("reports trend as null when there isn't enough history for a previous window", async () => {
+  it("reports trend as null when only one week has ever been finished", async () => {
     const { repositories, service } = createService();
     repositories.friendsGroupUsers.listForUser.mockResolvedValue([
       membershipRow("group-1", "Group One"),
     ]);
     repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([
       scoreRow({ userId: "user-a", friendsGroupId: "group-1", weekNumber: 1, pointsEarned: 10 }),
-      scoreRow({ userId: "user-a", friendsGroupId: "group-1", weekNumber: 2, pointsEarned: 10 }),
-      scoreRow({ userId: "user-a", friendsGroupId: "group-1", weekNumber: 3, pointsEarned: 10 }),
     ]);
 
     const result = await service.getMyStats("user-a");
 
     expect(result.trend).toBeNull();
+  });
+
+  it("reports a real trend from as little as two finished weeks (early-season case)", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      membershipRow("group-1", "Group One"),
+    ]);
+    repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([
+      scoreRow({
+        userId: "user-a",
+        friendsGroupId: "group-1",
+        weekNumber: 1,
+        correctResultPoints: 0,
+        pointsEarned: 0,
+      }),
+      scoreRow({
+        userId: "user-a",
+        friendsGroupId: "group-1",
+        weekNumber: 2,
+        correctResultPoints: 10,
+        pointsEarned: 27,
+      }),
+    ]);
+
+    const result = await service.getMyStats("user-a");
+
+    // previous window = [week1] only (weekScore 0.2), current window =
+    // [week1, week2] (average of 0.2 and 1.0 = 0.6) -> current > previous.
+    expect(result.trend).toBe("up");
   });
 
   it("returns an all-zero, non-crashing result for a brand-new user", async () => {
