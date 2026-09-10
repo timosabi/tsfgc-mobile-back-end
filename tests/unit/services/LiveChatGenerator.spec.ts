@@ -12,7 +12,11 @@ jest.mock("@anthropic-ai/sdk", () => {
 import {
   ClaudeLiveChatGenerator,
   MockLiveChatGenerator,
+  buildFactualMessage,
+  buildOverturnedMessage,
+  filterImpactsForMessage,
   type LiveChatContext,
+  type PredictionImpact,
 } from "../../../src/services/LiveChatGenerator.js";
 
 function context(): LiveChatContext {
@@ -48,17 +52,17 @@ describe("ClaudeLiveChatGenerator", () => {
 
   it("returns Claude's message, trimmed and unquoted", async () => {
     createMock.mockResolvedValue({
-      content: [{ type: "text", text: '  "27\' Goal. Alex looks like a genius."  ' }],
+      content: [{ type: "text", text: '  "Molly has hit their exact score, now 1st."  ' }],
     });
     const generator = new ClaudeLiveChatGenerator({ apiKey: "test-key" });
 
     const result = await generator.generate(context());
 
-    expect(result).toBe("27' Goal. Alex looks like a genius.");
+    expect(result).toBe("Molly has hit their exact score, now 1st.");
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 160,
+        max_tokens: 120,
         messages: [{ role: "user", content: JSON.stringify(context()) }],
       })
     );
@@ -85,43 +89,40 @@ describe("ClaudeLiveChatGenerator", () => {
   });
 });
 
-describe("MockLiveChatGenerator", () => {
-  it("names the scorer when player is present", async () => {
-    const message = await new MockLiveChatGenerator().generate({
+describe("buildFactualMessage", () => {
+  it("announces kick off", () => {
+    const message = buildFactualMessage({
       ...context(),
-      impacts: [],
-      player: "Saka",
+      eventType: "kickoff",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
     });
 
+    expect(message).toBe("KICK OFF. Arsenal v Chelsea");
+  });
+
+  it("names the scorer when player is present", () => {
+    const message = buildFactualMessage({ ...context(), player: "Saka" });
+
+    expect(message).toContain("GOAL!");
     expect(message).toContain("Saka scores");
   });
 
-  it("calls out a penalty explicitly", async () => {
-    const message = await new MockLiveChatGenerator().generate({
-      ...context(),
-      impacts: [],
-      player: "Kane",
-      isPenalty: true,
-    });
+  it("calls out a penalty explicitly", () => {
+    const message = buildFactualMessage({ ...context(), player: "Kane", isPenalty: true });
 
     expect(message).toContain("Kane slots the penalty");
   });
 
-  it("calls out an own goal explicitly", async () => {
-    const message = await new MockLiveChatGenerator().generate({
-      ...context(),
-      impacts: [],
-      player: "Gabriel",
-      isOwnGoal: true,
-    });
+  it("calls out an own goal explicitly", () => {
+    const message = buildFactualMessage({ ...context(), player: "Gabriel", isOwnGoal: true });
 
     expect(message).toContain("Gabriel turns it into his own net");
   });
 
-  it("mentions the assist when present on a normal goal", async () => {
-    const message = await new MockLiveChatGenerator().generate({
+  it("mentions the assist when present on a normal goal", () => {
+    const message = buildFactualMessage({
       ...context(),
-      impacts: [],
       player: "Saka",
       assistedBy: "Odegaard",
     });
@@ -129,27 +130,166 @@ describe("MockLiveChatGenerator", () => {
     expect(message).toContain("Saka scores (assist: Odegaard)");
   });
 
-  it("falls back to a generic goal message when no player is given", async () => {
-    const message = await new MockLiveChatGenerator().generate({
-      ...context(),
-      impacts: [],
-      player: null,
-    });
+  it("falls back to a generic goal message when no player is given", () => {
+    const message = buildFactualMessage({ ...context(), player: null });
 
-    expect(message).toContain("Goal!");
+    expect(message).toBe("GOAL!");
   });
 
-  it("mentions who was carded on a red card", async () => {
-    const message = await new MockLiveChatGenerator().generate({
+  it("says a team takes the lead when the score was level beforehand", () => {
+    const message = buildFactualMessage({
       ...context(),
-      eventType: "red_card",
-      impacts: [],
-      player: "Rice",
+      player: "Rogers",
+      team: "Chelsea",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+      previousScore: { home: 0, away: 0 },
+      score: { home: 0, away: 1 },
     });
 
+    expect(message).toContain("Chelsea take the lead.");
+  });
+
+  it("says a team levels things up when the goal creates a new tie", () => {
+    const message = buildFactualMessage({
+      ...context(),
+      player: "Calafiori",
+      team: "Arsenal",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+      previousScore: { home: 0, away: 1 },
+      score: { home: 1, away: 1 },
+    });
+
+    expect(message).toContain("Arsenal level things up.");
+  });
+
+  it("says a team extends their lead when they were already ahead", () => {
+    const message = buildFactualMessage({
+      ...context(),
+      player: "Saka",
+      team: "Arsenal",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+      previousScore: { home: 1, away: 0 },
+      score: { home: 2, away: 0 },
+    });
+
+    expect(message).toContain("Arsenal extend their lead.");
+  });
+
+  it("says a team pulls one back when they score but are still behind", () => {
+    const message = buildFactualMessage({
+      ...context(),
+      player: "Jesus",
+      team: "Arsenal",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+      previousScore: { home: 0, away: 2 },
+      score: { home: 1, away: 2 },
+    });
+
+    expect(message).toContain("Arsenal pull one back.");
+  });
+
+  it("omits the lead clause when there isn't enough score data", () => {
+    const message = buildFactualMessage({
+      ...context(),
+      player: "Saka",
+      team: "Arsenal",
+      previousScore: undefined,
+      score: undefined,
+    });
+
+    expect(message).toBe("GOAL! 27' Saka scores!");
+  });
+
+  it("mentions who was carded on a red card", () => {
+    const message = buildFactualMessage({ ...context(), eventType: "red_card", player: "Rice" });
+
+    expect(message).toContain("RED CARD!");
     expect(message).toContain("Rice sees red");
   });
 
+  it("reports half time with the current score", () => {
+    const message = buildFactualMessage({
+      ...context(),
+      eventType: "halftime",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+      score: { home: 1, away: 0 },
+    });
+
+    expect(message).toBe("HALF TIME. Arsenal 1 Chelsea 0");
+  });
+
+  it("reports full time with the final score", () => {
+    const message = buildFactualMessage({
+      ...context(),
+      eventType: "fulltime",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+      score: { home: 1, away: 1 },
+    });
+
+    expect(message).toBe("FULL TIME. Arsenal 1 Chelsea 1");
+  });
+});
+
+describe("buildOverturnedMessage", () => {
+  it("reports a disallowed goal", () => {
+    expect(buildOverturnedMessage("goal")).toBe("NO GOAL. As we were. Calm down.");
+  });
+
+  it("reports a rescinded red card", () => {
+    expect(buildOverturnedMessage("red_card")).toBe("CARD RESCINDED. As we were.");
+  });
+});
+
+describe("filterImpactsForMessage", () => {
+  it("keeps only exact_gained entries when any are present, dropping result_gained", () => {
+    const impacts: PredictionImpact[] = [
+      { name: "Molly", change: "exact_gained", rankDisplay: "1st" },
+      { name: "Tim", change: "result_gained", rankMovement: "none" },
+    ];
+
+    expect(filterImpactsForMessage(impacts)).toEqual([
+      { name: "Molly", change: "exact_gained", rankDisplay: "1st" },
+    ]);
+  });
+
+  it("falls back to result_gained entries when there is no exact_gained", () => {
+    const impacts: PredictionImpact[] = [
+      { name: "Molly", change: "result_gained", rankMovement: "up" },
+      { name: "Tim", change: "result_gained", rankMovement: "up" },
+    ];
+
+    expect(filterImpactsForMessage(impacts)).toEqual(impacts);
+  });
+
+  it("returns an empty list when only _lost changes are present", () => {
+    const impacts: PredictionImpact[] = [
+      { name: "Molly", change: "exact_lost", rankDisplay: null },
+      { name: "Tim", change: "result_lost", rankMovement: "down" },
+    ];
+
+    expect(filterImpactsForMessage(impacts)).toEqual([]);
+  });
+
+  it("passes red_card_correct entries through unfiltered", () => {
+    const impacts: PredictionImpact[] = [
+      { name: "Molly", change: "red_card_correct", rankDisplay: "2nd" },
+    ];
+
+    expect(filterImpactsForMessage(impacts)).toEqual(impacts);
+  });
+
+  it("returns an empty list for an empty input", () => {
+    expect(filterImpactsForMessage([])).toEqual([]);
+  });
+});
+
+describe("MockLiveChatGenerator", () => {
   it("mentions an exact-score gain and loss without any score numbers", async () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
@@ -163,14 +303,14 @@ describe("MockLiveChatGenerator", () => {
     expect(message).toContain("Bianca no longer has their exact score.");
   });
 
-  it("mentions the Red Card bonus being picked up", async () => {
+  it("mentions the Red Card bonus points being picked up", async () => {
     const message = await new MockLiveChatGenerator().generate({
       ...context(),
       eventType: "red_card",
       impacts: [{ name: "Alex", change: "red_card_correct", rankDisplay: null }],
     });
 
-    expect(message).toContain("Alex picks up the Red Card bonus!");
+    expect(message).toContain("Alex has their red! 5 points.");
   });
 
   it("mentions an outright matchweek rank", async () => {

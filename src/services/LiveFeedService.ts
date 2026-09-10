@@ -3,15 +3,24 @@ import type { Database, Json } from "../integrations/supabase/types.js";
 import {
   LiveChatGenerator,
   MockLiveChatGenerator,
+  buildFactualMessage,
+  buildOverturnedMessage,
+  filterImpactsForMessage,
+  type LiveChatContext,
   type PredictionImpact,
 } from "./LiveChatGenerator.js";
 import { createRepositories, type Repositories } from "../repositories/index.js";
-import type PushNotificationService from "./PushNotificationService.js";
 import type MatchweekOverviewService from "./MatchweekOverviewService.js";
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
 
+// How long a goal/red card waits before its Impact (or "NO GOAL"/"CARD
+// RESCINDED" overturn correction) message is written -- long enough to cover
+// a slower VAR review. The Score Update itself is written immediately,
+// unaffected by this delay.
+export const VERIFICATION_DELAY_MS = 120_000;
+
 type LiveEventInput = {
-  eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85" | "fulltime";
+  eventType: "kickoff" | "goal" | "red_card" | "halftime" | "penalty" | "minute_85" | "fulltime";
   fixtureId?: number;
   smFixtureId?: number;
   smEventId?: number;
@@ -41,10 +50,6 @@ type LiveFeedRowWithFixture = LiveFeedRow & {
     "id" | "matchweek" | "home_team" | "away_team"
   > | null;
 };
-type SubscriptionTarget = Pick<
-  Database["public"]["Tables"]["friends_group_subscriptions"]["Row"],
-  "friends_group_id" | "provider_season_id"
->;
 type UserSubmissionRef = Pick<
   Database["public"]["Tables"]["user_submissions"]["Row"],
   "user_id"
@@ -83,13 +88,41 @@ type LiveFeedRepositories = Pick<
   | "userSubmissions"
 >;
 
+type PendingVerification = {
+  key: string;
+  eventType: "goal" | "red_card";
+  smFixtureId: number;
+  fixtureId: number;
+  detectedAt: number;
+  groups: GroupRow[];
+  input: LiveEventInput;
+  fixture: FixtureRow;
+};
+
+const SUPPORTED_EVENT_TYPES = new Set([
+  "kickoff",
+  "goal",
+  "red_card",
+  "halftime",
+  "penalty",
+  "minute_85",
+  "fulltime",
+]);
+const VERIFIABLE_EVENT_TYPES = new Set(["goal", "red_card"]);
+
 export default class LiveFeedService {
   private readonly repositories: LiveFeedRepositories;
+  // In-process pending-verification queue -- same "single instance, no
+  // replicas" precedent as LiveEventsPollerService's firedSynthetic /
+  // DeadlineReminderService's remindedKeys. Worst case on a restart: a
+  // pending Score Update never gets its Impact/overturn follow-up, which is
+  // harmless (the feed just has one fewer message), never a duplicate or a
+  // crash.
+  private readonly pendingVerifications = new Map<string, PendingVerification>();
 
   constructor(
     clientOrRepositories: SupabaseClient<Database> | LiveFeedRepositories,
     private chatGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
-    private pushNotifications?: PushNotificationService,
     private matchweekOverview?: Pick<MatchweekOverviewService, "getMatchweekScores">
   ) {
     this.repositories = isLiveFeedRepositories(clientOrRepositories)
@@ -112,11 +145,7 @@ export default class LiveFeedService {
   }
 
   async processEvent(input: LiveEventInput): Promise<ProcessEventResult> {
-    if (
-      !["goal", "red_card", "halftime", "penalty", "minute_85", "fulltime"].includes(
-        input.eventType
-      )
-    ) {
+    if (!SUPPORTED_EVENT_TYPES.has(input.eventType)) {
       return { created: 0, skipped: true, reason: "unsupported_event" };
     }
 
@@ -135,12 +164,6 @@ export default class LiveFeedService {
     // Canary: Source A (fixture.live_*_score, from the periodic bulk /livescores
     // poll) and input.*Score (for goals: SportMonks' own per-event result, see
     // parseEventResult; otherwise the same Source A value) should usually agree.
-    // A mismatch here doesn't affect what gets displayed for goal events (see
-    // buildGroupContext, which prefers the per-event value as more precise) or
-    // what gets persisted (patchFixture always writes Source A), but is worth
-    // knowing about: it means Source A is lagging behind the per-fixture events
-    // feed for this instant, or (for non-goal events, which don't have their own
-    // per-event score) the own-goal-crediting replay has diverged.
     if (
       input.homeScore != null &&
       input.awayScore != null &&
@@ -161,72 +184,174 @@ export default class LiveFeedService {
     await this.patchFixture(input, fixture);
 
     const groups = await this.getSubscribedGroups(fixture);
+    const eventKey = this.eventKey(input);
+
+    // The factual "what happened" message never depends on any particular
+    // group's predictions, so it's computed once and reused for every group
+    // -- unlike the (group-specific) Impact message below.
+    const factualContext = this.buildEventFactualContext(input, fixture);
+    const factualMessage = buildFactualMessage(factualContext);
+    const isVerifiable = VERIFIABLE_EVENT_TYPES.has(input.eventType);
 
     const rows = await Promise.all(
-      groups.map(async (group) => {
-        const submittedUserIds = await this.getSubmittedUserIds(group.id, fixture);
-        const context = await this.buildGroupContext(
-          input,
-          fixture,
-          group,
-          submittedUserIds
-        );
-        const aiMessage = await this.chatGenerator.generate(context);
-        const eventKey = this.eventKey(input);
-
-        const payload = {
-          ...context,
-          smEventId: input.smEventId ?? null,
-          event: {
-            type: input.eventType,
-            minute: input.minute ?? null,
-            team: input.team ?? null,
-            playerName: input.playerName ?? null,
-            assistedBy: input.assistedBy ?? null,
-            isPenalty: Boolean(input.isPenalty),
-            isOwnGoal: Boolean(input.isOwnGoal),
-            // Sourced from the already-corrected context.score (Source A) rather than
-            // input.homeScore/awayScore directly, so the persisted payload never
-            // disagrees with the AI-generated text sitting next to it.
-            homeScore: context.score?.home ?? input.homeScore ?? null,
-            awayScore: context.score?.away ?? input.awayScore ?? null,
-          },
-        };
-
-        const feedRow = await this.repositories.liveFeedEvents.upsertFeedEvent({
+      groups.map((group) =>
+        this.repositories.liveFeedEvents.upsertFeedEvent({
           friends_group_id: group.id,
           fixture_id: fixture.id,
           matchweek: fixture.matchweek,
           sm_fixture_id: fixture.sm_fixture_id,
-          event_key: eventKey,
+          event_key: isVerifiable ? `${eventKey}:score` : eventKey,
           event_type: input.eventType,
-          payload: payload as Json,
-          ai_message: aiMessage,
-        });
-
-        // Push notifications only for the events users would actually want an
-        // OS-level alert for -- not halftime/85'/fulltime markers, which are
-        // ambient and already visible in the live feed if the app is open.
-        if (
-          this.pushNotifications &&
-          (input.eventType === "goal" || input.eventType === "red_card")
-        ) {
-          await this.pushNotifications.sendToUsers(submittedUserIds, {
-            title: context.fixtureName,
-            body: aiMessage,
-            data: {
-              type: input.eventType,
-              friendsGroupId: group.id,
-              matchweek: String(fixture.matchweek ?? ""),
-            },
-          });
-        }
-
-        return feedRow;
-      })
+          payload: {
+            ...factualContext,
+            stage: isVerifiable ? "score_update" : "ambient",
+            smEventId: input.smEventId ?? null,
+          } as Json,
+          ai_message: factualMessage,
+        })
+      )
     );
 
+    if (isVerifiable && groups.length) {
+      this.pendingVerifications.set(eventKey, {
+        key: eventKey,
+        eventType: input.eventType as "goal" | "red_card",
+        smFixtureId: fixture.sm_fixture_id,
+        fixtureId: fixture.id,
+        detectedAt: Date.now(),
+        groups,
+        input,
+        fixture,
+      });
+    }
+
     return { created: rows.length, rows };
+  }
+
+  // Verifications for a given fixture whose delay has elapsed, as of `now`.
+  // The poller calls this once per fixture per tick (it already has fresh
+  // score/event data for that fixture this tick) and decides confirmed vs.
+  // overturned itself, then reports back via resolveVerification.
+  getDuePendingVerifications(smFixtureId: number, now = Date.now()): PendingVerification[] {
+    return Array.from(this.pendingVerifications.values()).filter(
+      (item) => item.smFixtureId === smFixtureId && now - item.detectedAt >= VERIFICATION_DELAY_MS
+    );
+  }
+
+  // All pending verifications for a fixture, regardless of whether their
+  // delay has elapsed -- used when a fixture drops off the live list
+  // entirely before its verification became due (see
+  // LiveEventsPollerService.finalizeDroppedOutFixtures): can't re-verify a
+  // fixture we're no longer tracking, so it's finalized as confirmed rather
+  // than left pending forever.
+  getAllPendingVerifications(smFixtureId: number): PendingVerification[] {
+    return Array.from(this.pendingVerifications.values()).filter(
+      (item) => item.smFixtureId === smFixtureId
+    );
+  }
+
+  async resolveVerification(key: string, confirmed: boolean): Promise<void> {
+    const pending = this.pendingVerifications.get(key);
+    if (!pending) return;
+    this.pendingVerifications.delete(key);
+
+    if (!confirmed) {
+      const message = buildOverturnedMessage(pending.eventType);
+      await Promise.all(
+        pending.groups.map((group) =>
+          this.repositories.liveFeedEvents.upsertFeedEvent({
+            friends_group_id: group.id,
+            fixture_id: pending.fixtureId,
+            matchweek: pending.fixture.matchweek,
+            sm_fixture_id: pending.smFixtureId,
+            event_key: `${pending.key}:overturned`,
+            event_type: pending.eventType,
+            payload: { stage: "overturned" } as Json,
+            ai_message: message,
+          })
+        )
+      );
+      return;
+    }
+
+    await Promise.all(
+      pending.groups.map(async (group) => {
+        const submittedUserIds = await this.getSubmittedUserIds(group.id, pending.fixture);
+        const context = await this.buildGroupContext(
+          pending.input,
+          pending.fixture,
+          group,
+          submittedUserIds
+        );
+        const filteredImpacts = filterImpactsForMessage(context.impacts);
+        // Nothing meaningful changed -- no row at all, not even an empty one.
+        if (!filteredImpacts.length) return;
+
+        const impactContext = { ...context, impacts: filteredImpacts };
+        const aiMessage = await this.chatGenerator.generate(impactContext);
+
+        await this.repositories.liveFeedEvents.upsertFeedEvent({
+          friends_group_id: group.id,
+          fixture_id: pending.fixtureId,
+          matchweek: pending.fixture.matchweek,
+          sm_fixture_id: pending.smFixtureId,
+          event_key: `${pending.key}:impact`,
+          event_type: pending.eventType,
+          payload: { ...impactContext, stage: "impact" } as Json,
+          ai_message: aiMessage,
+        });
+      })
+    );
+  }
+
+  private buildEventFactualContext(
+    input: LiveEventInput,
+    fixture: FixtureRow
+  ): LiveChatContext {
+    const fixtureName = `${fixture.home_team} vs ${fixture.away_team}`;
+    const shared = {
+      groupName: "",
+      eventType: input.eventType,
+      fixtureName,
+      homeTeam: fixture.home_team,
+      awayTeam: fixture.away_team,
+      matchweek: fixture.matchweek,
+      minute: input.minute ?? null,
+      player: input.playerName ?? null,
+      assistedBy: input.assistedBy ?? null,
+      team: input.team ?? null,
+      isPenalty: Boolean(input.isPenalty),
+      isOwnGoal: Boolean(input.isOwnGoal),
+      impacts: [] as PredictionImpact[],
+      reason: "match_event",
+    };
+
+    if (input.eventType === "goal") {
+      // Same before/after resolution as buildGroupContext -- see the
+      // comment there for why input.homeScore/awayScore (the per-event
+      // SportMonks value) wins over fixture.live_*_score (Source A, which
+      // can lag a tick behind the per-fixture events feed).
+      const beforeHome =
+        input.beforeHomeScore ?? fixture.live_home_score ?? fixture.home_score ?? 0;
+      const beforeAway =
+        input.beforeAwayScore ?? fixture.live_away_score ?? fixture.away_score ?? 0;
+      const afterHome = input.homeScore ?? beforeHome;
+      const afterAway = input.awayScore ?? beforeAway;
+
+      return {
+        ...shared,
+        score: { home: afterHome, away: afterAway },
+        previousScore: { home: beforeHome, away: beforeAway },
+      };
+    }
+
+    return {
+      ...shared,
+      score: {
+        home: fixture.live_home_score ?? fixture.home_score ?? input.homeScore ?? null,
+        away: fixture.live_away_score ?? fixture.away_score ?? input.awayScore ?? null,
+      },
+    };
   }
 
   private async getFixture(input: LiveEventInput): Promise<FixtureRow | null> {
@@ -325,13 +450,7 @@ export default class LiveFeedService {
 
     // beforeHome/beforeAway are used both for the per-goal prediction diff below
     // (which specific goal flipped which prediction) and, via afterHome/afterAway,
-    // as the displayed `score` for goal events -- for a goal, input.homeScore/
-    // awayScore is the score SportMonks attached directly to that event (see
-    // LiveEventsPollerService.parseEventResult), which is more precise for "the
-    // score as of this event" than fixture.live_*_score: that DB column is only
-    // as fresh as the last bulk /livescores poll, which can genuinely lag behind
-    // the per-fixture events feed by a tick. fixture.live_*_score is still the
-    // fallback for event types that don't carry their own score (red_card etc.).
+    // as the displayed `score` for goal events.
     const beforeHome =
       input.beforeHomeScore ?? fixture.live_home_score ?? fixture.home_score ?? 0;
     const beforeAway =

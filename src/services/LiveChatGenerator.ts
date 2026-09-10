@@ -32,7 +32,14 @@ export type PredictionImpact = {
 
 export type LiveChatContext = {
   groupName: string;
-  eventType: "goal" | "red_card" | "halftime" | "penalty" | "minute_85" | "fulltime";
+  eventType:
+    | "kickoff"
+    | "goal"
+    | "red_card"
+    | "halftime"
+    | "penalty"
+    | "minute_85"
+    | "fulltime";
   fixtureName: string;
   homeTeam?: string | null;
   awayTeam?: string | null;
@@ -43,8 +50,8 @@ export type LiveChatContext = {
     away: number | null;
   };
   // The score immediately BEFORE this event (goal events only) -- without
-  // this, the model has no way to know whether a goal opened the scoring,
-  // extended an existing lead, or leveled things up, and will guess.
+  // this, there's no way to know whether a goal opened the scoring, extended
+  // an existing lead, or leveled things up.
   previousScore?: {
     home: number | null;
     away: number | null;
@@ -62,6 +69,143 @@ export interface LiveChatGenerator {
   generate(context: LiveChatContext): Promise<string>;
 }
 
+// Mirrors WeeklyScoreService's fixed red-card bonus (+5 points). Kept as a
+// literal here rather than imported, consistent with this codebase's existing
+// tolerance for small cross-service constant duplication (see
+// weekNumberFromMatchweek, independently duplicated in WeeklyScoreService,
+// MatchweekOverviewService, and PlayerStatsService).
+export const RED_CARD_BONUS_POINTS = 5;
+
+// --- Deterministic "what happened" messages -------------------------------
+//
+// Score Updates, kickoff/half-time/full-time markers, and VAR-overturn
+// corrections are all purely factual -- nothing here depends on any
+// particular group's predictions, so every group watching a fixture gets the
+// identical text. No AI call is needed or wanted for these: they're short,
+// mechanical, and need to appear the instant the event is detected (the
+// Impact message below is the one that waits and varies).
+
+function playerClause(context: Pick<LiveChatContext, "player" | "isOwnGoal" | "isPenalty" | "assistedBy">): string {
+  if (!context.player) return "GOAL!";
+  if (context.isOwnGoal) return `GOAL! ${context.player} turns it into his own net!`;
+  if (context.isPenalty) return `GOAL! ${context.player} slots the penalty!`;
+  if (context.assistedBy) return `GOAL! ${context.player} scores (assist: ${context.assistedBy})!`;
+  return `GOAL! ${context.player} scores!`;
+}
+
+// Compares before/after scores to describe the goal's effect on the
+// scoreline, mirroring the rule the AI prompt used to apply itself: breaking
+// a tie is "take the lead", extending an existing lead is "extend their
+// lead", the team that was behind scoring but still trailing is "pull one
+// back", and a goal that creates a new tie is "level things up". Returns null
+// when there isn't enough score data to say anything (e.g. a scoreless-goal
+// edge case), in which case the caller omits the clause entirely rather than
+// guessing.
+function leadDescriptionClause(params: {
+  scoringTeamName: string;
+  prevHome: number;
+  prevAway: number;
+  home: number;
+  away: number;
+  scoringTeamIsHome: boolean;
+}): string | null {
+  const wasLevel = params.prevHome === params.prevAway;
+  const isLevel = params.home === params.away;
+  const scoringTeamWasAhead = params.scoringTeamIsHome
+    ? params.prevHome > params.prevAway
+    : params.prevAway > params.prevHome;
+
+  if (wasLevel) return `${params.scoringTeamName} take the lead`;
+  if (isLevel) return `${params.scoringTeamName} level things up`;
+  if (scoringTeamWasAhead) return `${params.scoringTeamName} extend their lead`;
+  return `${params.scoringTeamName} pull one back`;
+}
+
+function buildGoalFactualMessage(context: LiveChatContext): string {
+  const minute = context.minute ? `${context.minute}' ` : "";
+  const clause = playerClause(context).replace(/^GOAL! /, `GOAL! ${minute}`);
+
+  const scoringTeamName = context.team ?? null;
+  const scoringTeamIsHome = scoringTeamName != null && scoringTeamName === context.homeTeam;
+  const hasScoreData =
+    scoringTeamName != null &&
+    context.previousScore?.home != null &&
+    context.previousScore?.away != null &&
+    context.score?.home != null &&
+    context.score?.away != null;
+
+  const lead = hasScoreData
+    ? leadDescriptionClause({
+        scoringTeamName: scoringTeamName as string,
+        prevHome: context.previousScore!.home as number,
+        prevAway: context.previousScore!.away as number,
+        home: context.score!.home as number,
+        away: context.score!.away as number,
+        scoringTeamIsHome,
+      })
+    : null;
+
+  return lead ? `${clause} ${lead}.` : clause;
+}
+
+function buildRedCardFactualMessage(context: LiveChatContext): string {
+  const minute = context.minute ? `${context.minute}' ` : "";
+  const player = context.player ? ` ${context.player} sees red!` : "";
+  return `RED CARD! ${minute}${player}`.replace(/\s+/g, " ").trim();
+}
+
+function scoreLine(context: LiveChatContext): string {
+  if (context.score?.home == null || context.score?.away == null) return "";
+  return ` ${context.homeTeam ?? "Home"} ${context.score.home} ${context.awayTeam ?? "Away"} ${context.score.away}`;
+}
+
+export function buildFactualMessage(context: LiveChatContext): string {
+  switch (context.eventType) {
+    case "kickoff":
+      return `KICK OFF. ${context.homeTeam ?? "Home"} v ${context.awayTeam ?? "Away"}`;
+    case "goal":
+      return buildGoalFactualMessage(context);
+    case "red_card":
+      return buildRedCardFactualMessage(context);
+    case "halftime":
+      return `HALF TIME.${scoreLine(context)}`.trim();
+    case "minute_85":
+      return `Five minutes left in ${context.fixtureName}.`;
+    case "fulltime":
+      return `FULL TIME.${scoreLine(context)}`.trim();
+    default:
+      return context.fixtureName;
+  }
+}
+
+// A VAR overturn is the one thing the live poller can detect after the fact
+// (the fixture's score/card state reverting) with no forward warning -- this
+// is the correction message written instead of an Impact message when that
+// happens during the verification window.
+export function buildOverturnedMessage(eventType: "goal" | "red_card"): string {
+  if (eventType === "red_card") return "CARD RESCINDED. As we were.";
+  return "NO GOAL. As we were. Calm down.";
+}
+
+// --- Impact message priority rule ------------------------------------------
+//
+// Applied BEFORE anything reaches the AI generator (or its fallback): an
+// exact-score hit is always the headline and suppresses every plain
+// correct-result mention in the same batch, to keep the message short. If
+// nobody hit the exact score, correct-result mentions are shown instead.
+// _lost changes are never surfaced (keeps the feed upbeat/short, per the
+// examples given). red_card_correct entries pass straight through -- a red
+// card event's impacts are never mixed with goal-outcome types.
+export function filterImpactsForMessage(impacts: PredictionImpact[]): PredictionImpact[] {
+  const exactGained = impacts.filter((impact) => impact.change === "exact_gained");
+  if (exactGained.length) return exactGained;
+
+  const resultGained = impacts.filter((impact) => impact.change === "result_gained");
+  if (resultGained.length) return resultGained;
+
+  return impacts.filter((impact) => impact.change === "red_card_correct");
+}
+
 type ImpactGroup = {
   change: PredictionChangeType;
   rankDisplay?: string | null;
@@ -69,53 +213,15 @@ type ImpactGroup = {
   names: string[];
 };
 
+// The Impact message: who a goal/red card just mattered for, and how. Kept
+// AI-generated (Claude, with this deterministic template as its fallback)
+// specifically so the phrasing can vary and grow richer over time -- unlike
+// the factual messages above, there's no "correct" fixed wording for this
+// one. Callers apply filterImpactsForMessage first and skip calling this
+// entirely when the result is empty (nothing meaningful happened).
 export class MockLiveChatGenerator implements LiveChatGenerator {
   async generate(context: LiveChatContext): Promise<string> {
-    const minute = context.minute ? `${context.minute}' ` : "";
-    const lead = this.leadClause(context);
-    const impactText = this.impactSentences(context.impacts).join(" ");
-
-    return `${minute}${lead}${impactText ? ` ${impactText}` : ""}`;
-  }
-
-  private leadClause(context: LiveChatContext): string {
-    if (context.eventType === "red_card") {
-      const cardedClause = context.player ? ` ${context.player} sees red.` : "";
-      return `Red card in ${context.fixtureName}.${cardedClause}`;
-    }
-
-    if (context.eventType === "halftime") {
-      return `Half-time in ${context.fixtureName}.`;
-    }
-
-    if (context.eventType === "fulltime") {
-      const score = this.scoreSuffix(context);
-      return `Full time in ${context.fixtureName}${score}`;
-    }
-
-    if (context.eventType === "penalty") {
-      return `Penalty awarded in ${context.fixtureName}.`;
-    }
-
-    if (context.eventType === "minute_85") {
-      return `Five minutes left in ${context.fixtureName}.`;
-    }
-
-    return `${this.goalClause(context)}!`;
-  }
-
-  private scoreSuffix(context: LiveChatContext): string {
-    return context.score?.home !== null && context.score?.away !== null
-      ? ` ${context.score?.home}-${context.score?.away}.`
-      : ".";
-  }
-
-  private goalClause(context: LiveChatContext): string {
-    if (!context.player) return "Goal";
-    if (context.isOwnGoal) return `${context.player} turns it into his own net`;
-    if (context.isPenalty) return `${context.player} slots the penalty`;
-    if (context.assistedBy) return `${context.player} scores (assist: ${context.assistedBy})`;
-    return `${context.player} scores`;
+    return this.impactSentences(context.impacts).join(" ").trim();
   }
 
   private impactSentences(impacts: PredictionImpact[]): string[] {
@@ -159,7 +265,7 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
         case "result_lost":
           return `${names} ${plural ? "no longer have" : "no longer has"} the result right.`;
         case "red_card_correct":
-          return `${names} ${plural ? "pick up" : "picks up"} the Red Card bonus!`;
+          return `${names} ${plural ? "have" : "has"} their red! ${RED_CARD_BONUS_POINTS} points.`;
         default:
           return "";
       }
@@ -176,6 +282,7 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
   // the time it reaches here -- see LiveFeedService.formatRankDisplay.
   private rankClause(group: ImpactGroup): string {
     if (!group.rankDisplay) return "";
+    if (group.change === "red_card_correct") return "";
 
     const names = this.joinNames(group.names);
     const plural = group.names.length > 1;
@@ -200,35 +307,30 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
   }
 }
 
-const SYSTEM_PROMPT = `You write live match updates for a friends' football-prediction group chat. Tone: factual, friendly, and SHORT -- one short clause for what happened, plus one short clause per compelling impact. No banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary.
+const IMPACT_SYSTEM_PROMPT = `You write ONE short, standalone update for a friends' football-prediction group chat, reporting how a goal or red card that JUST happened changed the group's standings. Someone else already told the group what happened in the match itself (the goal, the card) -- your job is ONLY the impact on people's predictions, never a restatement of the match event.
 
-Match detail fields (use when present, never invent values not present in the given context):
-- "player": who scored or was red carded. Mention them by name.
-- "isPenalty" / "isOwnGoal": say "penalty" or "own goal" explicitly when true.
-- "score" vs "previousScore": compare these before describing the goal's effect on the scoreline. Only say a team "extends"/"restores" their lead if "previousScore" already shows them ahead. If "previousScore" was level (including 0-0), say they "take the lead" or "go ahead" -- never "extend" a lead that didn't exist. If the scoring team was behind in "previousScore" and still is, say they "pull one back" or similar, not "extend" or "take the lead". If "previousScore" is null/absent, don't make any claim about the state of the lead at all.
-- "impacts": an array of { name, change, rankDisplay, rankMovement }. "change" is "exact_gained"/"exact_lost" (their exact-score prediction just became/stopped being correct), "result_gained"/"result_lost" (their plain win/draw/loss result guess just became/stopped being correct -- NOT the exact score), or "red_card_correct" (their red-card pick just hit). These are deliberately the ONLY outcomes worth reporting -- a closest-total-goals shift or a wrong red-card guess is not included in this data at all, so never invent or infer one. A person only ever appears once per event: if their exact score changed, that's reported instead of a separate result_gained/result_lost for the same person.
-- "impacts[].rankDisplay": (exact_gained/exact_lost/red_card_correct only) that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". Use it exactly as given -- never output a "#" or "=" symbol. State it as their current position only, never as a "moved from/to" change. Omit any rank mention if rankDisplay is null/absent.
-- "impacts[].rankMovement": (result_gained/result_lost only) one of "up", "down", or "none" -- whether this specific event actually moved that person in the live matchweek table. Never state a specific rank number or position for a result_gained/result_lost person (no rankDisplay is given for them) -- just convey whether it mattered: "up" reads as something like "up as it stands" or "climbing the table"; "down" as "slipping"/"down as it stands"; "none" as "no meaningful change" / "as it stands". Keep this part short -- a few words, not a full sentence.
-- When several people in "impacts" share the exact same change (and, for result_gained/result_lost, the same rankMovement), combine their names into ONE sentence rather than repeating a sentence per person -- e.g. "Molly, Sabi, Alastair and Leo have the result right -- no meaningful change." (comma-separated, "and" before the last name). Only split into separate sentences when the change or outcome genuinely differs between people.
+Tone: factual, friendly, and SHORT -- a single short sentence or two, no banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary.
+
+The "impacts" field is an array of { name, change, rankDisplay, rankMovement }, already filtered to the ONE thing worth reporting:
+- If it contains "exact_gained" entries, that's the entire story -- everyone listed just hit the exact score. Report only that.
+- Otherwise, if it contains "result_gained" entries, everyone listed just got the plain win/draw/loss result right (not the exact score).
+- Otherwise it contains "red_card_correct" entries -- everyone listed just had their red-card pick confirmed correct.
+- "rankDisplay" (exact_gained/red_card_correct only): that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". State it as their current position only, never as a "moved from/to" change. Omit if null/absent. Never output a "#" or "=" symbol.
+- "rankMovement" (result_gained only): one of "up", "down", or "none" -- whether this specific event actually moved that person in the live matchweek table. Never state a specific rank number for a result_gained person. Keep this part short: "up as it stands" / "slipping" / "no meaningful change".
+- When several people share the exact same change (and, for result_gained, the same rankMovement), combine their names into ONE sentence -- e.g. "Molly, Sabi, Alastair and Leo have the result right -- no meaningful change." Only split into separate sentences when the outcome genuinely differs between people.
+- For red_card_correct, mention the fixed +${RED_CARD_BONUS_POINTS}-point bonus each of them just earned.
 
 Rules:
 - Output ONLY the message text. No quotes, no markdown, no preamble.
-- Be brief. State what happened in the match in one short clause (e.g. "Maguire scores!", "Rice sees red."), then a separate short clause per distinct outcome in "impacts" (combining names as above). Do not add a plain score-recap sentence after a goal (e.g. never a standalone "Team A 2-1 Team B." sentence) -- the fixture and score are already shown elsewhere in the app.
-- Never invent stats, names, scorelines, or reactions not present in the given context.
-- If "impacts" is empty, just report the match event -- nothing more.
-- A "fulltime" event marks the end of ONLY that one fixture, and should still state that fixture's final score. A matchweek has many fixtures, often spread across several days -- never say or imply that the matchweek itself has ended, is complete, or is over.
+- Never restate the match event itself (no "Maguire scores" style clause) -- that's already been shown separately.
+- Never invent stats, names, or outcomes not present in "impacts".
+- "impacts" will never be empty when you're called -- if it somehow is, output nothing.
 
 Examples of the tone to match:
-"56' Maguire scores! Molly has hit their exact score, now 1st for the matchweek."
-"62' Red card! Rice sees red. Alex picks up the Red Card bonus!"
-"70' Saka scores! Alex no longer has their exact score."
-"59' Saka scores! Arsenal take the lead." (previousScore was 0-0 -- this is the first goal, not an extended lead)
-"77' Saka scores! Arsenal extend their lead." (previousScore already had Arsenal ahead)
-"59' Saka scores! Molly, Sabi, Alastair and Leo have the result right -- no meaningful change."
-"73' Odegaard scores! Molly and Sabi have the result right, up as it stands."
-"81' Kane scores from the penalty box."
-"45' Own goal from Gabriel."
-"90' Full time in Chelsea vs Arsenal 2-1."`;
+"Molly has hit their exact score, now 1st for the matchweek."
+"Alex picks up the Red Card bonus -- ${RED_CARD_BONUS_POINTS} points!"
+"Molly, Sabi, Alastair and Leo have the result right -- no meaningful change."
+"Molly and Sabi have the result right, up as it stands."`;
 
 export class ClaudeLiveChatGenerator implements LiveChatGenerator {
   private readonly client: Anthropic | null;
@@ -257,8 +359,8 @@ export class ClaudeLiveChatGenerator implements LiveChatGenerator {
     try {
       const response = await this.client.messages.create({
         model: this.model,
-        max_tokens: 160,
-        system: SYSTEM_PROMPT,
+        max_tokens: 120,
+        system: IMPACT_SYSTEM_PROMPT,
         messages: [{ role: "user", content: JSON.stringify(context) }],
       });
 

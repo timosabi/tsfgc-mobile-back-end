@@ -19,7 +19,6 @@ const matchweekOverview = new MatchweekOverviewService(supabaseService);
 const liveFeed = new LiveFeedService(
   supabaseService,
   new ClaudeLiveChatGenerator(),
-  pushNotifications,
   matchweekOverview
 );
 const deadlineReminder = new DeadlineReminderService(

@@ -21,7 +21,12 @@ function liveFixture(overrides: Record<string, unknown> = {}) {
 }
 
 function createDeps() {
-  const liveFeed = { processEvent: jest.fn().mockResolvedValue({ created: 1, rows: [] }) };
+  const liveFeed = {
+    processEvent: jest.fn().mockResolvedValue({ created: 1, rows: [] }),
+    getDuePendingVerifications: jest.fn().mockReturnValue([]),
+    getAllPendingVerifications: jest.fn().mockReturnValue([]),
+    resolveVerification: jest.fn().mockResolvedValue(undefined),
+  };
   const live = { getLiveFixtures: jest.fn() };
   const hydration = { hydrateFinishedFixtures: jest.fn().mockResolvedValue(undefined) };
   const weeklyScore = { calculateAllFinished: jest.fn().mockResolvedValue(undefined) };
@@ -447,6 +452,142 @@ describe("LiveEventsPollerService", () => {
     expect(result).toEqual({ liveCount: 0 });
     expect(deps.sportMonks.getFixtureById).not.toHaveBeenCalled();
     expect(deps.liveFeed.processEvent).not.toHaveBeenCalled();
+  });
+
+  it("fires the kickoff synthetic trigger once a fixture enters an in-play state", async () => {
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: {
+        sm_fixture_id: 1101,
+        provider_payload: { state: { developer_name: "INPLAY_1ST_HALF" } },
+      },
+      events: [],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+    await poller.poll();
+
+    const kickoffCalls = deps.liveFeed.processEvent.mock.calls.filter(
+      ([input]) => input.eventType === "kickoff"
+    );
+    expect(kickoffCalls).toHaveLength(1);
+    expect(kickoffCalls[0][0]).toEqual(
+      expect.objectContaining({ smEventId: 1101 * 1000 + 900 })
+    );
+  });
+
+  it("does not fire kickoff for a fixture that isn't in an in-play state", async () => {
+    const deps = createDeps();
+    deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+    deps.sportMonks.getFixtureById.mockResolvedValue({
+      fixture: { sm_fixture_id: 1101 }, // no provider_payload
+      events: [],
+    });
+
+    const poller = createPoller(deps);
+    await poller.poll();
+
+    const kickoffCalls = deps.liveFeed.processEvent.mock.calls.filter(
+      ([input]) => input.eventType === "kickoff"
+    );
+    expect(kickoffCalls).toHaveLength(0);
+  });
+
+  describe("verification resolution", () => {
+    it("confirms a pending goal when the current score still reflects it", async () => {
+      const deps = createDeps();
+      const pending = {
+        key: "101:goal:27",
+        eventType: "goal" as const,
+        input: { homeScore: 1, awayScore: 0 },
+      };
+      deps.liveFeed.getDuePendingVerifications.mockReturnValue([pending]);
+      deps.live.getLiveFixtures.mockResolvedValue([
+        liveFixture({ live_home_score: 1, live_away_score: 0 }),
+      ]);
+      deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
+
+      const poller = createPoller(deps);
+      await poller.poll();
+
+      expect(deps.liveFeed.resolveVerification).toHaveBeenCalledWith("101:goal:27", true);
+    });
+
+    it("marks a pending goal overturned when the current score no longer reflects it", async () => {
+      const deps = createDeps();
+      const pending = {
+        key: "101:goal:27",
+        eventType: "goal" as const,
+        input: { homeScore: 1, awayScore: 0 },
+      };
+      deps.liveFeed.getDuePendingVerifications.mockReturnValue([pending]);
+      // Score reverted back to 0-0 -- the goal recorded at detection time no
+      // longer stands.
+      deps.live.getLiveFixtures.mockResolvedValue([
+        liveFixture({ live_home_score: 0, live_away_score: 0 }),
+      ]);
+      deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
+
+      const poller = createPoller(deps);
+      await poller.poll();
+
+      expect(deps.liveFeed.resolveVerification).toHaveBeenCalledWith("101:goal:27", false);
+    });
+
+    it("confirms a pending red card when its event is still present in the fixture's events list", async () => {
+      const deps = createDeps();
+      const pending = {
+        key: "101:red_card:99",
+        eventType: "red_card" as const,
+        input: { smEventId: 99 },
+      };
+      deps.liveFeed.getDuePendingVerifications.mockReturnValue([pending]);
+      deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+      deps.sportMonks.getFixtureById.mockResolvedValue({
+        fixture: {},
+        events: [{ sm_event_id: 99, event_type: "red_card", minute: 45, player_name: "Rice", team: "Arsenal" }],
+      });
+
+      const poller = createPoller(deps);
+      await poller.poll();
+
+      expect(deps.liveFeed.resolveVerification).toHaveBeenCalledWith("101:red_card:99", true);
+    });
+
+    it("marks a pending red card overturned when its event has disappeared from the events list", async () => {
+      const deps = createDeps();
+      const pending = {
+        key: "101:red_card:99",
+        eventType: "red_card" as const,
+        input: { smEventId: 99 },
+      };
+      deps.liveFeed.getDuePendingVerifications.mockReturnValue([pending]);
+      deps.live.getLiveFixtures.mockResolvedValue([liveFixture()]);
+      deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
+
+      const poller = createPoller(deps);
+      await poller.poll();
+
+      expect(deps.liveFeed.resolveVerification).toHaveBeenCalledWith("101:red_card:99", false);
+    });
+
+    it("finalizes any still-pending verification as confirmed when a fixture drops off the live list", async () => {
+      const deps = createDeps();
+      deps.sportMonks.getFixtureById.mockResolvedValue({ fixture: {}, events: [] });
+      deps.liveFeed.getAllPendingVerifications.mockReturnValue([
+        { key: "101:goal:27", eventType: "goal", input: {} },
+      ]);
+      deps.live.getLiveFixtures.mockResolvedValueOnce([liveFixture()]);
+      const poller = createPoller(deps);
+      await poller.poll();
+
+      deps.live.getLiveFixtures.mockResolvedValueOnce([]);
+      await poller.poll();
+
+      expect(deps.liveFeed.resolveVerification).toHaveBeenCalledWith("101:goal:27", true);
+    });
   });
 
   it("skips a tick if the previous poll() call is still in progress", async () => {

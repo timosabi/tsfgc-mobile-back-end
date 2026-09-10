@@ -60,35 +60,70 @@ export default class DeadlineReminderService {
     });
     if (!openMatchweeks.length) return 0;
 
-    // The most recently opened matchweek is the one currently accepting
-    // predictions; earlier ones are already locked/finished.
-    const matchweek = openMatchweeks[openMatchweeks.length - 1];
-
-    const fixtures = await this.repositories.fixtures.listForSubscription({
-      providerLeagueId: target.provider_league_id,
-      providerSeasonId: target.provider_season_id,
-      matchweek,
-    });
-    if (!fixtures.length) return 0;
-
-    const locksAt = Math.min(...fixtures.map((fixture) => this.fixtureStartTime(fixture)));
-    const hoursRemaining = (locksAt - Date.now()) / (60 * 60 * 1000);
-    if (hoursRemaining <= 0) return 0; // already locked/live -- nothing to remind
-
     let sentCount = 0;
 
-    for (const thresholdHours of REMINDER_THRESHOLDS_HOURS) {
-      if (hoursRemaining > thresholdHours) continue;
+    // The most recently opened matchweek is the one currently accepting
+    // predictions; earlier ones are already locked/finished. Pre-lock and
+    // "just locked" checks only ever apply to this one.
+    const currentMatchweek = openMatchweeks[openMatchweeks.length - 1];
+    const currentFixtures = await this.repositories.fixtures.listForSubscription({
+      providerLeagueId: target.provider_league_id,
+      providerSeasonId: target.provider_season_id,
+      matchweek: currentMatchweek,
+    });
 
-      const key = `${target.friends_group_id}:${matchweek}:${thresholdHours}`;
-      if (this.remindedKeys.has(key)) continue;
-      this.remindedKeys.add(key);
-
-      const sent = await this.remindNonSubmittedMembers(
-        target.friends_group_id,
-        matchweek,
-        thresholdHours
+    if (currentFixtures.length) {
+      const locksAt = Math.min(
+        ...currentFixtures.map((fixture) => this.fixtureStartTime(fixture))
       );
+      const hoursRemaining = (locksAt - Date.now()) / (60 * 60 * 1000);
+
+      if (hoursRemaining > 0) {
+        for (const thresholdHours of REMINDER_THRESHOLDS_HOURS) {
+          if (hoursRemaining > thresholdHours) continue;
+
+          const key = `${target.friends_group_id}:${currentMatchweek}:${thresholdHours}`;
+          if (this.remindedKeys.has(key)) continue;
+          this.remindedKeys.add(key);
+
+          const sent = await this.remindNonSubmittedMembers(
+            target.friends_group_id,
+            currentMatchweek,
+            thresholdHours
+          );
+          if (sent) sentCount += 1;
+        }
+      } else {
+        const key = `${target.friends_group_id}:${currentMatchweek}:locked`;
+        if (!this.remindedKeys.has(key)) {
+          this.remindedKeys.add(key);
+          const sent = await this.notifyLocked(target.friends_group_id, currentMatchweek);
+          if (sent) sentCount += 1;
+        }
+      }
+    }
+
+    // "Finished" is checked against the latest open matchweek and the one
+    // before it -- covers the tick where a matchweek finishes and, by
+    // finishing, unlocks the next one (which would otherwise become
+    // currentMatchweek and hide the one that just needed this check).
+    for (const matchweek of openMatchweeks.slice(-2)) {
+      const key = `${target.friends_group_id}:${matchweek}:finished`;
+      if (this.remindedKeys.has(key)) continue;
+
+      const weekFixtures =
+        matchweek === currentMatchweek
+          ? currentFixtures
+          : await this.repositories.fixtures.listForSubscription({
+              providerLeagueId: target.provider_league_id,
+              providerSeasonId: target.provider_season_id,
+              matchweek,
+            });
+      if (!weekFixtures.length) continue;
+      if (!weekFixtures.every((fixture) => fixture.status === "finished")) continue;
+
+      this.remindedKeys.add(key);
+      const sent = await this.notifyFinished(target.friends_group_id, matchweek);
       if (sent) sentCount += 1;
     }
 
@@ -124,6 +159,55 @@ export default class DeadlineReminderService {
         slug: group.slug,
       },
     });
+
+    return true;
+  }
+
+  // Unlike remindNonSubmittedMembers, this goes to every member -- it's a
+  // status FYI ("predictions closed"), not a nudge aimed at people who still
+  // need to act.
+  private async notifyLocked(friendsGroupId: string, matchweek: string): Promise<boolean> {
+    const [members, group] = await Promise.all([
+      this.repositories.friendsGroupUsers.listMembers(friendsGroupId),
+      this.repositories.friendsGroups.findById(friendsGroupId),
+    ]);
+    if (!members.length || !group) return false;
+
+    await this.pushNotifications.sendToUsers(
+      members.map((member) => member.user_id),
+      {
+        title: "Predictions locked",
+        body: `${matchweek} predictions for ${group.name} are now locked`,
+        data: {
+          type: "locked",
+          friendsGroupId,
+          slug: group.slug,
+        },
+      }
+    );
+
+    return true;
+  }
+
+  private async notifyFinished(friendsGroupId: string, matchweek: string): Promise<boolean> {
+    const [members, group] = await Promise.all([
+      this.repositories.friendsGroupUsers.listMembers(friendsGroupId),
+      this.repositories.friendsGroups.findById(friendsGroupId),
+    ]);
+    if (!members.length || !group) return false;
+
+    await this.pushNotifications.sendToUsers(
+      members.map((member) => member.user_id),
+      {
+        title: "Matchweek finished",
+        body: `${matchweek} has finished for ${group.name} -- check how you did!`,
+        data: {
+          type: "matchweek_finished",
+          friendsGroupId,
+          slug: group.slug,
+        },
+      }
+    );
 
     return true;
   }

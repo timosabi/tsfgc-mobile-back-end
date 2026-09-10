@@ -61,7 +61,7 @@ describe("DeadlineReminderService", () => {
     expect(pushNotifications.sendToUsers).not.toHaveBeenCalled();
   });
 
-  it("does nothing when the matchweek's fixtures have already locked", async () => {
+  it("sends a locked notification to every member once fixtures have locked", async () => {
     const { repositories, pushNotifications, service } = createService();
     repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
     repositories.fixtures.listForSubscription.mockResolvedValue([
@@ -70,8 +70,78 @@ describe("DeadlineReminderService", () => {
 
     const result = await service.checkAndRemind();
 
-    expect(result).toEqual({ remindersSent: 0 });
-    expect(pushNotifications.sendToUsers).not.toHaveBeenCalled();
+    expect(result).toEqual({ remindersSent: 1 });
+    expect(pushNotifications.sendToUsers).toHaveBeenCalledWith(
+      ["user-a", "user-b"], // every member, not just non-submitted
+      expect.objectContaining({
+        title: "Predictions locked",
+        body: expect.stringContaining("Matchweek 2"),
+        data: {
+          type: "locked",
+          friendsGroupId: "group-1",
+          slug: "los-muchachos",
+        },
+      })
+    );
+  });
+
+  it("does not re-send the locked notification on a later tick", async () => {
+    const { repositories, pushNotifications, service } = createService();
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
+    repositories.fixtures.listForSubscription.mockResolvedValue([
+      { starting_at: isoHoursFromNow(-1), match_date: "2026-08-01", match_time: "15:00:00" },
+    ] as never);
+
+    await service.checkAndRemind();
+    const secondResult = await service.checkAndRemind();
+
+    expect(secondResult).toEqual({ remindersSent: 0 });
+    expect(pushNotifications.sendToUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a finished notification to every member once every fixture is finished", async () => {
+    const { repositories, pushNotifications, service } = createService();
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
+    repositories.fixtures.listForSubscription.mockResolvedValue([
+      {
+        starting_at: isoHoursFromNow(-3),
+        match_date: "2026-08-01",
+        match_time: "15:00:00",
+        status: "finished",
+      },
+    ] as never);
+
+    const result = await service.checkAndRemind();
+
+    expect(result).toEqual({ remindersSent: 2 }); // locked + finished
+    expect(pushNotifications.sendToUsers).toHaveBeenCalledWith(
+      ["user-a", "user-b"],
+      expect.objectContaining({
+        title: "Matchweek finished",
+        body: expect.stringContaining("Matchweek 2"),
+        data: {
+          type: "matchweek_finished",
+          friendsGroupId: "group-1",
+          slug: "los-muchachos",
+        },
+      })
+    );
+  });
+
+  it("does not send a finished notification while any fixture in the matchweek is still unfinished", async () => {
+    const { repositories, pushNotifications, service } = createService();
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
+    repositories.fixtures.listForSubscription.mockResolvedValue([
+      { starting_at: isoHoursFromNow(-3), match_date: "2026-08-01", match_time: "15:00:00", status: "finished" },
+      { starting_at: isoHoursFromNow(-1), match_date: "2026-08-01", match_time: "17:00:00", status: "live" },
+    ] as never);
+
+    await service.checkAndRemind();
+
+    expect(pushNotifications.sendToUsers).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ title: "Matchweek finished" })
+    );
   });
 
   it("reminds non-submitted members once the 24h threshold is crossed", async () => {

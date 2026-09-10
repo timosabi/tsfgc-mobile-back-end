@@ -13,10 +13,30 @@ type FreshFixtureState = Pick<
 >;
 
 const GOAL_EVENT_TYPES = new Set(["goal", "own_goal", "penalty_goal"]);
+const KICKOFF_KEY_OFFSET = 900;
 const HALFTIME_KEY_OFFSET = 901;
 const MINUTE_85_KEY_OFFSET = 902;
 const FULLTIME_KEY_OFFSET = 903;
 const FULLTIME_STATES = new Set(["FT", "AET", "FT_PEN"]);
+// Mirrors the "live" branch of SportMonksTransformer's statusMap -- SportMonks
+// uses inconsistent developer_name casing/naming across API versions, so this
+// matches every known form rather than just the current one.
+const IN_PLAY_STATES = new Set([
+  "first_half",
+  "INPLAY_1ST_HALF",
+  "half_time",
+  "second_half",
+  "INPLAY_2ND_HALF",
+  "INPLAY_ET",
+  "INPLAY_PENALTIES",
+  "extra_time",
+  "penalty_shootout",
+  "LIVE",
+  "HT",
+  "ET",
+  "BREAK",
+  "PEN_LIVE",
+]);
 
 export default class LiveEventsPollerService {
   private readonly previouslyLive = new Set<number>();
@@ -90,6 +110,13 @@ export default class LiveEventsPollerService {
         null,
         null
       );
+
+      // Can't re-verify a fixture we're no longer tracking -- finalize any
+      // still-pending Score Updates as confirmed rather than leaving them
+      // pending forever (a no-op if nothing was pending).
+      for (const pending of this.deps.liveFeed.getAllPendingVerifications(smFixtureId)) {
+        await this.deps.liveFeed.resolveVerification(pending.key, true);
+      }
     }
   }
 
@@ -169,6 +196,46 @@ export default class LiveEventsPollerService {
     }
 
     await this.processSyntheticEvents(freshFixture, homeScore, awayScore);
+    await this.resolvePendingVerifications(fixture, events ?? [], homeScore, awayScore);
+  }
+
+  // Checks every goal/red-card Score Update whose verification delay has
+  // elapsed for this fixture (LiveFeedService.VERIFICATION_DELAY_MS after it
+  // was first detected) and tells LiveFeedService whether it still stands or
+  // was reversed, using data already fetched this tick -- no extra API call.
+  //
+  // Goals: the only signal polling can give us for a VAR overturn is the
+  // aggregate score no longer reflecting it (best-effort -- depends on the
+  // provider's bulk /livescores feed reflecting the reversal promptly).
+  // Red cards: checked against the per-fixture events list instead, since
+  // there's no numeric score to compare -- if the event has disappeared from
+  // the provider's events feed, treat it as retracted.
+  private async resolvePendingVerifications(
+    fixture: FixtureRow,
+    events: Array<{ sm_event_id?: number }>,
+    homeScore: number | null,
+    awayScore: number | null
+  ): Promise<void> {
+    const due = this.deps.liveFeed.getDuePendingVerifications(fixture.sm_fixture_id);
+    if (!due.length) return;
+
+    const currentEventIds = new Set(
+      events.map((event) => event.sm_event_id).filter((id): id is number => id != null)
+    );
+
+    for (const pending of due) {
+      let confirmed = true;
+
+      if (pending.eventType === "goal") {
+        const recordedTotal = (pending.input.homeScore ?? 0) + (pending.input.awayScore ?? 0);
+        const currentTotal = (homeScore ?? 0) + (awayScore ?? 0);
+        confirmed = currentTotal >= recordedTotal;
+      } else if (pending.eventType === "red_card" && pending.input.smEventId != null) {
+        confirmed = currentEventIds.has(pending.input.smEventId);
+      }
+
+      await this.deps.liveFeed.resolveVerification(pending.key, confirmed);
+    }
   }
 
   private parseEventResult(
@@ -199,6 +266,16 @@ export default class LiveEventsPollerService {
     homeScore: number | null,
     awayScore: number | null
   ): Promise<void> {
+    if (this.isInPlay(fixture)) {
+      await this.fireSynthetic(
+        fixture,
+        "kickoff",
+        KICKOFF_KEY_OFFSET,
+        homeScore,
+        awayScore
+      );
+    }
+
     if (this.isHalftime(fixture)) {
       await this.fireSynthetic(
         fixture,
@@ -232,7 +309,7 @@ export default class LiveEventsPollerService {
 
   private async fireSynthetic(
     fixture: FreshFixtureState,
-    eventType: "halftime" | "minute_85" | "fulltime",
+    eventType: "kickoff" | "halftime" | "minute_85" | "fulltime",
     keyOffset: number,
     homeScore: number | null,
     awayScore: number | null
@@ -260,6 +337,14 @@ export default class LiveEventsPollerService {
     if (GOAL_EVENT_TYPES.has(rawType)) return "goal";
     if (rawType === "red_card") return "red_card";
     return null;
+  }
+
+  private isInPlay(fixture: FreshFixtureState): boolean {
+    const payload = fixture.provider_payload as {
+      state?: { developer_name?: string };
+    } | null;
+    const developerName = payload?.state?.developer_name;
+    return developerName ? IN_PLAY_STATES.has(developerName) : false;
   }
 
   private isHalftime(fixture: FreshFixtureState): boolean {
