@@ -12,6 +12,7 @@ jest.mock("@anthropic-ai/sdk", () => {
 import {
   ClaudeLiveChatGenerator,
   MockLiveChatGenerator,
+  DeterministicMessageGenerator,
   buildFactualMessage,
   buildOverturnedMessage,
   filterImpactsForMessage,
@@ -65,6 +66,22 @@ describe("ClaudeLiveChatGenerator", () => {
         max_tokens: 120,
         messages: [{ role: "user", content: JSON.stringify(context()) }],
       })
+    );
+  });
+
+  it("uses a custom systemPrompt when provided, defaulting to the impact prompt otherwise", async () => {
+    createMock.mockResolvedValue({
+      content: [{ type: "text", text: "GOAL! 27' Saka scores! Arsenal edge ahead." }],
+    });
+    const generator = new ClaudeLiveChatGenerator({
+      apiKey: "test-key",
+      systemPrompt: "CUSTOM SCORE UPDATE PROMPT",
+    });
+
+    await generator.generate(context());
+
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ system: "CUSTOM SCORE UPDATE PROMPT" })
     );
   });
 
@@ -233,6 +250,26 @@ describe("buildFactualMessage", () => {
     });
 
     expect(message).toBe("FULL TIME. Arsenal 1 Chelsea 1");
+  });
+});
+
+describe("DeterministicMessageGenerator", () => {
+  it("delegates to buildFactualMessage", async () => {
+    const message = await new DeterministicMessageGenerator().generate({
+      ...context(),
+      eventType: "kickoff",
+      homeTeam: "Arsenal",
+      awayTeam: "Chelsea",
+    });
+
+    expect(message).toBe(
+      buildFactualMessage({
+        ...context(),
+        eventType: "kickoff",
+        homeTeam: "Arsenal",
+        awayTeam: "Chelsea",
+      })
+    );
   });
 });
 

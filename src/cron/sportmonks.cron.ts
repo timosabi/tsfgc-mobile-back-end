@@ -4,7 +4,11 @@ import { supabaseService } from "../integrations/supabase/supabaseClient.js";
 import { createRepositories } from "../repositories/index.js";
 import WeeklyScoreService from "../services/WeeklyScoreService.js";
 import LiveFeedService from "../services/LiveFeedService.js";
-import { ClaudeLiveChatGenerator } from "../services/LiveChatGenerator.js";
+import {
+  ClaudeLiveChatGenerator,
+  DeterministicMessageGenerator,
+  SCORE_UPDATE_SYSTEM_PROMPT,
+} from "../services/LiveChatGenerator.js";
 import LiveEventsPollerService from "../services/LiveEventsPollerService.js";
 import PushNotificationService from "../services/PushNotificationService.js";
 import DeadlineReminderService from "../services/DeadlineReminderService.js";
@@ -19,7 +23,11 @@ const matchweekOverview = new MatchweekOverviewService(supabaseService);
 const liveFeed = new LiveFeedService(
   supabaseService,
   new ClaudeLiveChatGenerator(),
-  matchweekOverview
+  matchweekOverview,
+  new ClaudeLiveChatGenerator({
+    systemPrompt: SCORE_UPDATE_SYSTEM_PROMPT,
+    fallback: new DeterministicMessageGenerator(),
+  })
 );
 const deadlineReminder = new DeadlineReminderService(
   supabaseService,

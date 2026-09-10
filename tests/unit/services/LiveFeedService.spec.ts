@@ -4,7 +4,10 @@ import type { LiveFeedFixtureRow } from "../../../src/repositories/FixturesRepos
 import type { Repositories } from "../../../src/repositories/index.js";
 import { createRepositoryMock } from "../helpers/mockRepositories.js";
 
-function createService(matchweekOverview?: { getMatchweekScores: jest.Mock }) {
+function createService(
+  matchweekOverview?: { getMatchweekScores: jest.Mock },
+  scoreUpdateGenerator?: LiveChatGenerator
+) {
   const repositories = {
     fixtures: createRepositoryMock<
       Pick<Repositories["fixtures"], "findLiveFeedFixture" | "updateFixtureById">
@@ -34,7 +37,7 @@ function createService(matchweekOverview?: { getMatchweekScores: jest.Mock }) {
       Pick<Repositories["userSubmissions"], "listSubmittedUserIds">
     >(["listSubmittedUserIds"]),
   };
-  const chatGenerator: LiveChatGenerator = {
+  const impactGenerator: LiveChatGenerator = {
     generate: jest.fn().mockResolvedValue("Molly has hit their exact score."),
   };
 
@@ -86,12 +89,13 @@ function createService(matchweekOverview?: { getMatchweekScores: jest.Mock }) {
   );
 
   return {
-    chatGenerator,
+    impactGenerator,
     repositories,
     service: new LiveFeedService(
       repositories as unknown as ConstructorParameters<typeof LiveFeedService>[0],
-      chatGenerator,
-      matchweekOverview as never
+      impactGenerator,
+      matchweekOverview as never,
+      scoreUpdateGenerator
     ),
   };
 }
@@ -103,9 +107,9 @@ function upsertCallsFor(repositories: ReturnType<typeof createService>["reposito
 }
 
 describe("LiveFeedService", () => {
-  describe("Score Update (immediate, deterministic)", () => {
-    it("writes a Score Update row for a goal immediately, without calling the chat generator or patching the fixture's score", async () => {
-      const { chatGenerator, repositories, service } = createService();
+  describe("Score Update (immediate)", () => {
+    it("writes a Score Update row for a goal immediately (deterministic fallback when no AI generator is configured), without touching the impact generator or patching the fixture's score", async () => {
+      const { impactGenerator, repositories, service } = createService();
 
       const result = await service.processEvent({
         eventType: "goal",
@@ -120,7 +124,7 @@ describe("LiveFeedService", () => {
       });
 
       expect(result).toMatchObject({ created: 1 });
-      expect(chatGenerator.generate).not.toHaveBeenCalled();
+      expect(impactGenerator.generate).not.toHaveBeenCalled();
       // Score columns are owned exclusively by the bulk /livescores poll (Source A);
       // a per-event goal replay (Source B) must never write them.
       expect(repositories.fixtures.updateFixtureById).not.toHaveBeenCalled();
@@ -132,6 +136,51 @@ describe("LiveFeedService", () => {
           payload: expect.objectContaining({ stage: "score_update" }),
         })
       );
+    });
+
+    it("generates the Score Update via the AI generator when one is configured, for a goal or red card", async () => {
+      const scoreUpdateGenerator: LiveChatGenerator = {
+        generate: jest.fn().mockResolvedValue("GOAL! 27' Saka scores! Arsenal edge ahead."),
+      };
+      const { repositories, service } = createService(undefined, scoreUpdateGenerator);
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        team: "Arsenal",
+        playerName: "Saka",
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      expect(scoreUpdateGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "goal", player: "Saka" })
+      );
+      expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event_key: "101:goal:27:score",
+          ai_message: "GOAL! 27' Saka scores! Arsenal edge ahead.",
+        })
+      );
+    });
+
+    it("does not call the Score Update AI generator for ambient markers (kickoff/halftime/minute_85/fulltime)", async () => {
+      const scoreUpdateGenerator: LiveChatGenerator = {
+        generate: jest.fn().mockResolvedValue("should not be used"),
+      };
+      const { service } = createService(undefined, scoreUpdateGenerator);
+
+      await service.processEvent({
+        eventType: "kickoff",
+        smFixtureId: 1101,
+        smEventId: 1101900,
+        minute: 0,
+      });
+
+      expect(scoreUpdateGenerator.generate).not.toHaveBeenCalled();
     });
 
     it("records the goal event's own score in the score-update payload, not a stale fixture row", async () => {
@@ -184,7 +233,7 @@ describe("LiveFeedService", () => {
     });
 
     it("writes an ambient marker (kickoff/halftime/minute_85/fulltime) immediately with no chat-generator call and no pending verification", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
 
       await service.processEvent({
         eventType: "kickoff",
@@ -193,7 +242,7 @@ describe("LiveFeedService", () => {
         minute: 0,
       });
 
-      expect(chatGenerator.generate).not.toHaveBeenCalled();
+      expect(impactGenerator.generate).not.toHaveBeenCalled();
       expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           event_key: "1101:kickoff:1101900",
@@ -204,7 +253,7 @@ describe("LiveFeedService", () => {
     });
 
     it("skips already-processed events before generating or fanning out to groups", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
       repositories.matchEvents.findBySmEventId.mockResolvedValue({ id: "evt-1" });
 
       const result = await service.processEvent({
@@ -224,7 +273,7 @@ describe("LiveFeedService", () => {
       });
       expect(repositories.fixtures.findLiveFeedFixture).not.toHaveBeenCalled();
       expect(repositories.matchEvents.upsertProviderEvent).not.toHaveBeenCalled();
-      expect(chatGenerator.generate).not.toHaveBeenCalled();
+      expect(impactGenerator.generate).not.toHaveBeenCalled();
       expect(repositories.liveFeedEvents.upsertFeedEvent).not.toHaveBeenCalled();
     });
 
@@ -295,7 +344,6 @@ describe("LiveFeedService", () => {
 
     it("only surfaces a pending verification once its delay has elapsed", async () => {
       const { service } = createService();
-      const detectedAt = Date.now();
 
       await service.processEvent({
         eventType: "goal",
@@ -307,15 +355,21 @@ describe("LiveFeedService", () => {
         awayScore: 0,
       });
 
+      // Read the pending entry's actual recorded detectedAt back, rather than
+      // assuming it lines up with a timestamp taken just before the
+      // (asynchronous) processEvent call -- that gap is normally a
+      // sub-millisecond race, but not one worth the test depending on.
+      const { detectedAt } = service.getAllPendingVerifications(1101)[0];
+
       expect(service.getDuePendingVerifications(1101, detectedAt + 60_000)).toEqual([]);
       expect(service.getDuePendingVerifications(1101, detectedAt + 120_000)).toHaveLength(1);
     });
 
     it("resolveVerification is a no-op for an unknown key", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
 
       await expect(service.resolveVerification("no-such-key", true)).resolves.toBeUndefined();
-      expect(chatGenerator.generate).not.toHaveBeenCalled();
+      expect(impactGenerator.generate).not.toHaveBeenCalled();
       expect(repositories.liveFeedEvents.upsertFeedEvent).not.toHaveBeenCalled();
     });
 
@@ -339,7 +393,7 @@ describe("LiveFeedService", () => {
 
   describe("Impact message (after verification confirms)", () => {
     it("computes impacts from the explicit before-score, not the fixture's already-live score, and writes an impact row", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
       // Simulates the real poller: getLiveFixtures() has already patched the
       // fixture row to the post-goal score before processEvent runs, so the
       // fixture's own live_*_score can't be trusted as "before this goal".
@@ -360,7 +414,7 @@ describe("LiveFeedService", () => {
       });
       await service.resolveVerification("101:goal:27", true);
 
-      expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect(impactGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
           groupName: "Los Muchachos",
           impacts: [{ name: "Alex", change: "exact_gained", rankDisplay: null }],
@@ -375,7 +429,7 @@ describe("LiveFeedService", () => {
     });
 
     it("filters out result_gained in favour of exact_gained before calling the chat generator", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
       repositories.predictions.listScorePredictionsByGroupFixture.mockResolvedValue([
         { user_id: "user-a", fixture_id: 101, home_score_prediction: 1, away_score_prediction: 0 },
         { user_id: "user-b", fixture_id: 101, home_score_prediction: 2, away_score_prediction: 0 },
@@ -392,14 +446,14 @@ describe("LiveFeedService", () => {
       });
       await service.resolveVerification("101:goal:27", true);
 
-      const impacts = (chatGenerator.generate as jest.Mock).mock.calls[0][0].impacts;
+      const impacts = (impactGenerator.generate as jest.Mock).mock.calls[0][0].impacts;
       expect(impacts.map((impact: { change: string }) => impact.change)).toEqual([
         "exact_gained",
       ]);
     });
 
     it("does not call the chat generator or write an impact row when nothing meaningful changed", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
       // Both users' predictions stay wrong before and after -- no exact_gained,
       // no result_gained, only the implicit "no change" case.
       repositories.predictions.listScorePredictionsByGroupFixture.mockResolvedValue([
@@ -417,7 +471,7 @@ describe("LiveFeedService", () => {
       });
       await service.resolveVerification("101:goal:27", true);
 
-      expect(chatGenerator.generate).not.toHaveBeenCalled();
+      expect(impactGenerator.generate).not.toHaveBeenCalled();
       expect(upsertCallsFor(repositories, ":impact")).toHaveLength(0);
     });
 
@@ -430,7 +484,7 @@ describe("LiveFeedService", () => {
           ],
         }),
       };
-      const { chatGenerator, service } = createService(matchweekOverview);
+      const { impactGenerator, service } = createService(matchweekOverview);
 
       await service.processEvent({
         eventType: "goal",
@@ -457,7 +511,7 @@ describe("LiveFeedService", () => {
         matchweek: "Matchweek 2",
         fixtureScoreOverride: { fixtureId: 101, homeScore: 1, awayScore: 0 },
       });
-      expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect(impactGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
           impacts: expect.arrayContaining([
             expect.objectContaining({ name: "Alex", rankDisplay: "1st" }),
@@ -475,7 +529,7 @@ describe("LiveFeedService", () => {
           ],
         }),
       };
-      const { chatGenerator, repositories, service } = createService(matchweekOverview);
+      const { impactGenerator, repositories, service } = createService(matchweekOverview);
       repositories.redCardPredictions.listUserIdsByGroupFixture.mockResolvedValue([
         { user_id: "user-a", fixture_id: 101 },
         { user_id: "user-b", fixture_id: 101 },
@@ -490,7 +544,7 @@ describe("LiveFeedService", () => {
       });
       await service.resolveVerification("101:red_card:99", true);
 
-      expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect(impactGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
           impacts: expect.arrayContaining([
             expect.objectContaining({ name: "Alex", rankDisplay: "1st" }),
@@ -504,7 +558,7 @@ describe("LiveFeedService", () => {
       const matchweekOverview = {
         getMatchweekScores: jest.fn().mockRejectedValue(new Error("boom")),
       };
-      const { chatGenerator, service } = createService(matchweekOverview);
+      const { impactGenerator, service } = createService(matchweekOverview);
 
       await service.processEvent({
         eventType: "goal",
@@ -517,7 +571,7 @@ describe("LiveFeedService", () => {
       });
       await service.resolveVerification("101:goal:27", true);
 
-      expect(chatGenerator.generate).toHaveBeenCalledWith(
+      expect(impactGenerator.generate).toHaveBeenCalledWith(
         expect.objectContaining({
           impacts: expect.arrayContaining([
             expect.objectContaining({ name: "Alex", rankDisplay: null }),
@@ -548,7 +602,7 @@ describe("LiveFeedService", () => {
               })
           ),
         };
-        const { chatGenerator, repositories, service } = createService(matchweekOverview);
+        const { impactGenerator, repositories, service } = createService(matchweekOverview);
         repositories.predictions.listScorePredictionsByGroupFixture.mockResolvedValue([
           { user_id: "user-a", fixture_id: 101, home_score_prediction: 3, away_score_prediction: 0 },
           { user_id: "user-b", fixture_id: 101, home_score_prediction: 2, away_score_prediction: 0 },
@@ -565,7 +619,7 @@ describe("LiveFeedService", () => {
         });
         await service.resolveVerification("101:goal:27", true);
 
-        expect(chatGenerator.generate).toHaveBeenCalledWith(
+        expect(impactGenerator.generate).toHaveBeenCalledWith(
           expect.objectContaining({
             impacts: expect.arrayContaining([
               expect.objectContaining({
@@ -584,7 +638,7 @@ describe("LiveFeedService", () => {
       });
 
       it("reports a result_lost impact when a later goal turns a correct result incorrect", async () => {
-        const { chatGenerator, repositories, service } = createService();
+        const { impactGenerator, repositories, service } = createService();
         repositories.predictions.listScorePredictionsByGroupFixture.mockResolvedValue([
           { user_id: "user-a", fixture_id: 101, home_score_prediction: 2, away_score_prediction: 0 },
         ]);
@@ -606,14 +660,14 @@ describe("LiveFeedService", () => {
         // the batch, still isn't "nothing meaningful" -- filterImpactsForMessage
         // drops _lost changes from the MESSAGE, but the underlying impacts
         // computation itself must still have detected it correctly.
-        expect(chatGenerator.generate).not.toHaveBeenCalled();
+        expect(impactGenerator.generate).not.toHaveBeenCalled();
       });
     });
   });
 
   describe("VAR overturn", () => {
     it("writes a NO GOAL correction instead of an impact when a goal is overturned, without calling the chat generator", async () => {
-      const { chatGenerator, repositories, service } = createService();
+      const { impactGenerator, repositories, service } = createService();
 
       await service.processEvent({
         eventType: "goal",
@@ -626,7 +680,7 @@ describe("LiveFeedService", () => {
       });
       await service.resolveVerification("101:goal:27", false);
 
-      expect(chatGenerator.generate).not.toHaveBeenCalled();
+      expect(impactGenerator.generate).not.toHaveBeenCalled();
       expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           event_key: "101:goal:27:overturned",

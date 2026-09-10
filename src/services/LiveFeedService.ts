@@ -3,6 +3,7 @@ import type { Database, Json } from "../integrations/supabase/types.js";
 import {
   LiveChatGenerator,
   MockLiveChatGenerator,
+  DeterministicMessageGenerator,
   buildFactualMessage,
   buildOverturnedMessage,
   filterImpactsForMessage,
@@ -122,8 +123,9 @@ export default class LiveFeedService {
 
   constructor(
     clientOrRepositories: SupabaseClient<Database> | LiveFeedRepositories,
-    private chatGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
-    private matchweekOverview?: Pick<MatchweekOverviewService, "getMatchweekScores">
+    private impactGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
+    private matchweekOverview?: Pick<MatchweekOverviewService, "getMatchweekScores">,
+    private scoreUpdateGenerator: LiveChatGenerator = new DeterministicMessageGenerator()
   ) {
     this.repositories = isLiveFeedRepositories(clientOrRepositories)
       ? clientOrRepositories
@@ -188,10 +190,16 @@ export default class LiveFeedService {
 
     // The factual "what happened" message never depends on any particular
     // group's predictions, so it's computed once and reused for every group
-    // -- unlike the (group-specific) Impact message below.
+    // -- unlike the (group-specific) Impact message below. Goal/red_card
+    // Score Updates go through the AI generator (varied "take the lead" /
+    // "extend their lead" etc. phrasing); the ambient markers (kickoff,
+    // halftime, etc.) stay purely deterministic -- there's no lead/trail
+    // framing to vary for those.
     const factualContext = this.buildEventFactualContext(input, fixture);
-    const factualMessage = buildFactualMessage(factualContext);
     const isVerifiable = VERIFIABLE_EVENT_TYPES.has(input.eventType);
+    const factualMessage = isVerifiable
+      ? await this.scoreUpdateGenerator.generate(factualContext)
+      : buildFactualMessage(factualContext);
 
     const rows = await Promise.all(
       groups.map((group) =>
@@ -288,7 +296,7 @@ export default class LiveFeedService {
         if (!filteredImpacts.length) return;
 
         const impactContext = { ...context, impacts: filteredImpacts };
-        const aiMessage = await this.chatGenerator.generate(impactContext);
+        const aiMessage = await this.impactGenerator.generate(impactContext);
 
         await this.repositories.liveFeedEvents.upsertFeedEvent({
           friends_group_id: group.id,

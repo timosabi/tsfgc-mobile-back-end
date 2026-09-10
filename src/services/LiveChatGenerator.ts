@@ -178,6 +178,16 @@ export function buildFactualMessage(context: LiveChatContext): string {
   }
 }
 
+// Wraps buildFactualMessage as a LiveChatGenerator so it can serve as the
+// fallback for the Score Update's AI generator (see SCORE_UPDATE_SYSTEM_PROMPT
+// below) -- if Claude is unavailable or fails, the event still gets announced,
+// just without the varied phrasing.
+export class DeterministicMessageGenerator implements LiveChatGenerator {
+  async generate(context: LiveChatContext): Promise<string> {
+    return buildFactualMessage(context);
+  }
+}
+
 // A VAR overturn is the one thing the live poller can detect after the fact
 // (the fixture's score/card state reverting) with no forward warning -- this
 // is the correction message written instead of an Impact message when that
@@ -332,15 +342,51 @@ Examples of the tone to match:
 "Molly, Sabi, Alastair and Leo have the result right -- no meaningful change."
 "Molly and Sabi have the result right, up as it stands."`;
 
+// The Score Update: the first thing the group sees for a goal or red card,
+// reporting only the match event itself (never predictions/impacts -- that's
+// a separate, later message). Kept AI-generated for varied phrasing on the
+// "take the lead" / "level things up" / "extend their lead" / "pull one
+// back" framing, with DeterministicMessageGenerator (buildFactualMessage) as
+// the fallback so a goal is never left unannounced if Claude is unavailable.
+export const SCORE_UPDATE_SYSTEM_PROMPT = `You write a single, short, factual live-match update for a goal or red card, for a friends' football-prediction group chat. This is the FIRST thing the group sees for this event -- report only what happened in the match itself. Never mention predictions, impacts, or any group member by outcome -- that's reported separately, later.
+
+Tone: factual, energetic, SHORT -- one short sentence (two short clauses joined naturally is fine). No banter, no mockery.
+
+Match detail fields (use when present, never invent values not present in the given context):
+- "eventType": "goal" or "red_card". Always start with "GOAL!" or "RED CARD!"
+- "player": who scored or was carded -- always name them.
+- "minute": include as e.g. "25'".
+- "isPenalty" / "isOwnGoal": say "from the penalty spot" / "own goal" explicitly when true.
+- "score" vs "previousScore" (goal only): compare these to describe the goal's effect on the scoreline, VARYING your wording naturally each time rather than repeating the same phrase:
+  - If "previousScore" was level (including 0-0), the scoring team now leads -- vary between phrasings like "take the lead", "go ahead", "move in front", "edge ahead".
+  - If the goal makes the score level, they've equalized -- vary between "level things up", "pull level", "draw level", "peg it back level".
+  - If the scoring team was already ahead, they extend that lead -- vary between "extend their lead", "stretch the lead", "add to their lead", "double their advantage" (only when the lead is now exactly 2).
+  - If the scoring team was behind and still is, they've merely pulled one back -- vary between "pull one back", "get one back", "reduce the arrears", "give themselves hope".
+  - Never claim a lead/equalizer/extension the score data doesn't support. If "previousScore" is null/absent, don't make any claim about the state of the lead at all.
+
+Rules:
+- Output ONLY the message text. No quotes, no markdown, no preamble.
+- Exactly one sentence. Nothing more.
+- Never invent stats, names, or scorelines not present in the given context.
+
+Examples of the tone/variety to match:
+"GOAL! 25' Havertz scores! Arsenal back in front."
+"GOAL! 2' Rogers scores! Chelsea take the lead."
+"GOAL! 12' Calafiori scores! Arsenal pull level."
+"RED CARD! 60' Rice sees red."
+"GOAL! 77' Saka scores from the penalty spot! Arsenal stretch their lead."`;
+
 export class ClaudeLiveChatGenerator implements LiveChatGenerator {
   private readonly client: Anthropic | null;
   private readonly model: string;
   private readonly fallback: LiveChatGenerator;
+  private readonly systemPrompt: string;
 
   constructor(options?: {
     apiKey?: string;
     model?: string;
     fallback?: LiveChatGenerator;
+    systemPrompt?: string;
   }) {
     const apiKey = options?.apiKey ?? process.env.ANTHROPIC_API_KEY;
     this.model =
@@ -348,6 +394,7 @@ export class ClaudeLiveChatGenerator implements LiveChatGenerator {
       process.env.LIVE_CHAT_MODEL ??
       "claude-haiku-4-5-20251001";
     this.fallback = options?.fallback ?? new MockLiveChatGenerator();
+    this.systemPrompt = options?.systemPrompt ?? IMPACT_SYSTEM_PROMPT;
     this.client = apiKey ? new Anthropic({ apiKey, timeout: 8000 }) : null;
   }
 
@@ -360,7 +407,7 @@ export class ClaudeLiveChatGenerator implements LiveChatGenerator {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: 120,
-        system: IMPACT_SYSTEM_PROMPT,
+        system: this.systemPrompt,
         messages: [{ role: "user", content: JSON.stringify(context) }],
       });
 
