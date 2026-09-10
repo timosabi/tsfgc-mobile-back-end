@@ -7,7 +7,7 @@ import {
 
 export type FriendsGroupOverviewRow = Pick<
   TableRow<"friends_groups">,
-  "id" | "name" | "slug" | "is_open" | "status" | "created_by"
+  "id" | "name" | "slug" | "is_open" | "status" | "created_by" | "created_at"
 >;
 export type FriendsGroupInviteRow = Pick<
   TableRow<"friends_groups">,
@@ -21,7 +21,7 @@ export default class FriendsGroupsRepository extends BaseRepository<"friends_gro
 
   async findOverviewById(id: string): Promise<FriendsGroupOverviewRow | null> {
     const { data, error } = await this.table()
-      .select("id, name, slug, is_open, status, created_by")
+      .select("id, name, slug, is_open, status, created_by, created_at")
       .eq("id", id)
       .maybeSingle();
 

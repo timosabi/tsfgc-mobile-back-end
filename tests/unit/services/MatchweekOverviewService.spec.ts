@@ -51,6 +51,7 @@ function createService(fixtures: OverviewFixtureRow[]) {
     is_open: true,
     status: "approved",
     created_by: "user-a",
+    created_at: "2026-08-01T10:00:00Z",
   });
   repositories.friendsGroupSubscriptions.findActiveByFriendsGroup.mockResolvedValue({
     friends_group_id: "group-1",
@@ -242,6 +243,58 @@ describe("MatchweekOverviewService", () => {
         matchweek: "Matchweek 2",
       })
     ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it("marks matchweeks that kicked off before the group was created as ineligible", async () => {
+    const { repositories, service } = createService([
+      overviewFixture(101, "Matchweek 1", "finished", "2026-08-01T12:00:00Z"),
+      overviewFixture(201, "Matchweek 2", "finished", "2026-08-08T12:00:00Z"),
+      overviewFixture(301, "Matchweek 3", "live", "2026-08-15T12:00:00Z"),
+    ]);
+    repositories.friendsGroups.findOverviewById.mockResolvedValue({
+      id: "group-1",
+      name: "Los Muchachos",
+      slug: "los-muchachos",
+      is_open: true,
+      status: "approved",
+      created_by: "user-a",
+      created_at: "2026-08-10T00:00:00Z",
+    });
+
+    const overview = await service.getOverview({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "current",
+    });
+
+    expect(overview.navigation.ineligibleMatchweeks).toEqual([
+      "Matchweek 1",
+      "Matchweek 2",
+    ]);
+  });
+
+  it("marks no matchweeks as ineligible when the group predates the season", async () => {
+    const { repositories, service } = createService([
+      overviewFixture(101, "Matchweek 1", "finished", "2026-08-01T12:00:00Z"),
+      overviewFixture(201, "Matchweek 2", "live", "2026-08-08T12:00:00Z"),
+    ]);
+    repositories.friendsGroups.findOverviewById.mockResolvedValue({
+      id: "group-1",
+      name: "Los Muchachos",
+      slug: "los-muchachos",
+      is_open: true,
+      status: "approved",
+      created_by: "user-a",
+      created_at: "2026-01-01T00:00:00Z",
+    });
+
+    const overview = await service.getOverview({
+      userId: "user-a",
+      friendsGroupId: "group-1",
+      matchweek: "current",
+    });
+
+    expect(overview.navigation.ineligibleMatchweeks).toEqual([]);
   });
 
   it("ties the matchweek rank when two users have equal points this week", async () => {

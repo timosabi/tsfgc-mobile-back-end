@@ -183,7 +183,12 @@ export default class MatchweekOverviewService {
       selectedMatchweek,
       locksAt,
       state,
-      navigation: this.buildNavigation(matchweeks, selectedMatchweek, openMatchweeks),
+      navigation: this.buildNavigation(
+        matchweeks,
+        selectedMatchweek,
+        openMatchweeks,
+        friendsGroup.created_at
+      ),
       permissions: {
         canEditPredictions: state === "editable",
         canSubmitPredictions: state === "editable",
@@ -415,17 +420,28 @@ export default class MatchweekOverviewService {
   private buildNavigation(
     matchweeks: Map<string, FixtureRow[]>,
     selected: string,
-    openMatchweeks: string[]
+    openMatchweeks: string[],
+    groupCreatedAt: string
   ) {
     const keys = Array.from(matchweeks.keys());
     const index = keys.indexOf(selected);
     const current = this.pickCurrentMatchweek(matchweeks);
+    const groupCreatedTime = new Date(groupCreatedAt).getTime();
+    const ineligibleMatchweeks = keys.filter((matchweek) => {
+      const earliestStart = (matchweeks.get(matchweek) ?? []).reduce((min, fixture) => {
+        const startTime = fixture.starting_at ? new Date(fixture.starting_at).getTime() : NaN;
+        return Number.isNaN(startTime) ? min : Math.min(min, startTime);
+      }, Infinity);
+
+      return earliestStart !== Infinity && earliestStart < groupCreatedTime;
+    });
     return {
       current,
       previous: index > 0 ? keys[index - 1] : null,
       next: index >= 0 && index < keys.length - 1 ? keys[index + 1] : null,
       available: keys,
       openMatchweeks,
+      ineligibleMatchweeks,
     };
   }
 
