@@ -15,6 +15,7 @@ function createService() {
         | "findStatus"
         | "listForGroup"
         | "listPending"
+        | "listPendingForGroups"
         | "updateRequest"
         | "updateStatus"
         | "upsertPendingRequest"
@@ -24,16 +25,27 @@ function createService() {
       "findStatus",
       "listForGroup",
       "listPending",
+      "listPendingForGroups",
       "updateRequest",
       "updateStatus",
       "upsertPendingRequest",
     ]),
+    friendsGroupUsers: createRepositoryMock<
+      Pick<Repositories["friendsGroupUsers"], "listOwnedGroupIdsForUser">
+    >(["listOwnedGroupIdsForUser"]),
+    profiles: createRepositoryMock<Pick<Repositories["profiles"], "listPreviewsByIds">>([
+      "listPreviewsByIds",
+    ]),
   };
+
+  const adminAuthClient = { auth: { admin: { getUserById: jest.fn() } } };
 
   return {
     repositories,
+    adminAuthClient,
     service: new FriendsGroupJoinRequestService(
-      repositories as unknown as ConstructorParameters<typeof FriendsGroupJoinRequestService>[0]
+      repositories as unknown as ConstructorParameters<typeof FriendsGroupJoinRequestService>[0],
+      adminAuthClient
     ),
   };
 }
@@ -78,6 +90,41 @@ describe("FriendsGroupJoinRequestService", () => {
         processedBy: "user-a",
       })
     ).resolves.toMatchObject({ status: "approved" });
+  });
+
+  it("enriches pending requests for an owner with requester display name and email", async () => {
+    const { repositories, adminAuthClient, service } = createService();
+    repositories.friendsGroupUsers.listOwnedGroupIdsForUser.mockResolvedValue([
+      "group-1",
+    ]);
+    repositories.friendsGroupJoinRequests.listPendingForGroups.mockResolvedValue([
+      { ...joinRequestRow("request-1"), friends_groups: { name: "Los Muchachos", slug: "los-muchachos" } },
+    ]);
+    repositories.profiles.listPreviewsByIds.mockResolvedValue([
+      { id: "user-b", display_name: "Bianca", avatar_emoji: null, color_class: null },
+    ]);
+    adminAuthClient.auth.admin.getUserById.mockResolvedValue({
+      data: { user: { email: "bianca@example.com" } },
+    });
+
+    const result = await service.getAllPendingRequestsForOwner("owner-1");
+
+    expect(repositories.profiles.listPreviewsByIds).toHaveBeenCalledWith(["user-b"]);
+    expect(adminAuthClient.auth.admin.getUserById).toHaveBeenCalledWith("user-b");
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "request-1",
+        requester: { display_name: "Bianca", email: "bianca@example.com" },
+      }),
+    ]);
+  });
+
+  it("returns no requests without a profile/email lookup when the owner has no groups", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listOwnedGroupIdsForUser.mockResolvedValue([]);
+
+    await expect(service.getAllPendingRequestsForOwner("owner-1")).resolves.toEqual([]);
+    expect(repositories.friendsGroupJoinRequests.listPendingForGroups).not.toHaveBeenCalled();
   });
 });
 

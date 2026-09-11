@@ -6,6 +6,7 @@ import FriendsGroupJoinRequestService from "../services/FriendsGroupJoinRequestS
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
 import FriendsGroupService from "../services/FriendsGroupService.js";
 import FriendsGroupUsersService from "../services/FriendsGroupUsersService.js";
+import { supabaseService } from "../integrations/supabase/supabaseClient.js";
 
 export default class FriendsGroupJoinRequestController {
   public router = Router();
@@ -36,7 +37,10 @@ export default class FriendsGroupJoinRequestController {
   private createServices(req: Request, res: Response) {
     const auth = AuthService.forRequest(req, res);
     const client = auth.client as SupabaseClient<Database>;
-    const friendsGroupJoinRequest = new FriendsGroupJoinRequestService(client);
+    const friendsGroupJoinRequest = new FriendsGroupJoinRequestService(
+      client,
+      supabaseService
+    );
     const friendsGroup = new FriendsGroupService(client);
     const friendsGroupUsers = new FriendsGroupUsersService(client);
 
