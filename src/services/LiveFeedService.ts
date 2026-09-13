@@ -13,6 +13,7 @@ import {
 import { createRepositories, type Repositories } from "../repositories/index.js";
 import type MatchweekOverviewService from "./MatchweekOverviewService.js";
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
+import { shortTeamName } from "./teamDisplayNames.js";
 
 // How long a goal/red card waits before its Impact (or "NO GOAL"/"CARD
 // RESCINDED" overturn correction) message is written -- long enough to cover
@@ -356,18 +357,20 @@ export default class LiveFeedService {
     input: LiveEventInput,
     fixture: FixtureRow
   ): LiveChatContext {
-    const fixtureName = `${fixture.home_team} vs ${fixture.away_team}`;
+    const homeTeam = shortTeamName(fixture.home_team);
+    const awayTeam = shortTeamName(fixture.away_team);
+    const fixtureName = `${homeTeam} vs ${awayTeam}`;
     const shared = {
       groupName: "",
       eventType: input.eventType,
       fixtureName,
-      homeTeam: fixture.home_team,
-      awayTeam: fixture.away_team,
+      homeTeam,
+      awayTeam,
       matchweek: fixture.matchweek,
       minute: input.minute ?? null,
       player: input.playerName ?? null,
       assistedBy: input.assistedBy ?? null,
-      team: input.team ?? null,
+      team: input.team ? shortTeamName(input.team) : null,
       isPenalty: Boolean(input.isPenalty),
       isOwnGoal: Boolean(input.isOwnGoal),
       impacts: [] as PredictionImpact[],
@@ -436,11 +439,13 @@ export default class LiveFeedService {
     submittedUserIds: string[]
   ) {
     const profileById = await this.getProfiles(submittedUserIds);
-    const fixtureName = `${fixture.home_team} vs ${fixture.away_team}`;
+    const homeTeam = shortTeamName(fixture.home_team);
+    const awayTeam = shortTeamName(fixture.away_team);
+    const fixtureName = `${homeTeam} vs ${awayTeam}`;
     const eventDetail = {
       player: input.playerName ?? null,
       assistedBy: input.assistedBy ?? null,
-      team: input.team ?? null,
+      team: input.team ? shortTeamName(input.team) : null,
       isPenalty: Boolean(input.isPenalty),
       isOwnGoal: Boolean(input.isOwnGoal),
     };
@@ -450,8 +455,8 @@ export default class LiveFeedService {
         groupName: group.name,
         eventType: input.eventType,
         fixtureName,
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
+        homeTeam,
+        awayTeam,
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
         score: {
@@ -482,8 +487,8 @@ export default class LiveFeedService {
         groupName: group.name,
         eventType: input.eventType,
         fixtureName,
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
+        homeTeam,
+        awayTeam,
         matchweek: fixture.matchweek,
         minute: input.minute ?? null,
         score: {
@@ -576,8 +581,8 @@ export default class LiveFeedService {
       groupName: group.name,
       eventType: input.eventType,
       fixtureName,
-      homeTeam: fixture.home_team,
-      awayTeam: fixture.away_team,
+      homeTeam,
+      awayTeam,
       matchweek: fixture.matchweek,
       minute: input.minute ?? null,
       score: {
