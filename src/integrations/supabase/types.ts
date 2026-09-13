@@ -37,11 +37,13 @@ export type Database = {
       fixtures: {
         Row: {
           away_score: number | null
+          away_short_code: string | null
           away_team: string
           created_at: string
           current_minute: number | null
           has_red_card: boolean | null
           home_score: number | null
+          home_short_code: string | null
           home_team: string
           id: number
           live_away_score: number | null
@@ -61,11 +63,13 @@ export type Database = {
         }
         Insert: {
           away_score?: number | null
+          away_short_code?: string | null
           away_team: string
           created_at?: string
           current_minute?: number | null
           has_red_card?: boolean | null
           home_score?: number | null
+          home_short_code?: string | null
           home_team: string
           id?: number
           live_away_score?: number | null
@@ -85,11 +89,13 @@ export type Database = {
         }
         Update: {
           away_score?: number | null
+          away_short_code?: string | null
           away_team?: string
           created_at?: string
           current_minute?: number | null
           has_red_card?: boolean | null
           home_score?: number | null
+          home_short_code?: string | null
           home_team?: string
           id?: number
           live_away_score?: number | null

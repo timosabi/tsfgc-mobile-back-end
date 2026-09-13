@@ -38,10 +38,12 @@ export class SportMonksTransformer {
 
     return {
       away_score: currentAwayScore,
+      away_short_code: awayTeam?.short_code || null,
       away_team: awayTeam?.name || "Unknown Away Team",
       current_minute: currentMinute,
       has_red_card: hasRedCard,
       home_score: currentHomeScore,
+      home_short_code: homeTeam?.short_code || null,
       home_team: homeTeam?.name || "Unknown Home Team",
       live_away_score: status === "live" ? currentAwayScore : null,
       live_home_score: status === "live" ? currentHomeScore : null,

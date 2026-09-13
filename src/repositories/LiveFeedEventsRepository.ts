@@ -15,7 +15,7 @@ export default class LiveFeedEventsRepository extends BaseRepository<"live_feed_
     matchweek: string
   ): Promise<TableRow<"live_feed_events">[]> {
     const { data, error } = await this.table()
-      .select("*, fixture:fixtures(id, matchweek, home_team, away_team)")
+      .select("*, fixture:fixtures(id, matchweek, home_team, away_team, home_short_code, away_short_code)")
       .eq("friends_group_id", friendsGroupId)
       .eq("matchweek", matchweek)
       .order("created_at", { ascending: true });
@@ -45,7 +45,7 @@ export default class LiveFeedEventsRepository extends BaseRepository<"live_feed_
     limit: number;
   }): Promise<TableRow<"live_feed_events">[]> {
     let query = this.table()
-      .select("*, fixture:fixtures(id, matchweek, home_team, away_team)")
+      .select("*, fixture:fixtures(id, matchweek, home_team, away_team, home_short_code, away_short_code)")
       .eq("friends_group_id", params.friendsGroupId)
       .order("created_at", { ascending: true })
       .limit(Math.min(params.limit, 100));

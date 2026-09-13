@@ -32,7 +32,12 @@ type WeeklyScoreRow = Database["public"]["Tables"]["weekly_scores"]["Row"];
 type LiveFeedRow = Database["public"]["Tables"]["live_feed_events"]["Row"] & {
   fixture: Pick<
     Database["public"]["Tables"]["fixtures"]["Row"],
-    "id" | "matchweek" | "home_team" | "away_team"
+    | "id"
+    | "matchweek"
+    | "home_team"
+    | "away_team"
+    | "home_short_code"
+    | "away_short_code"
   > | null;
 };
 type MatchweekOverviewRepositories = Pick<

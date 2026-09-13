@@ -48,7 +48,12 @@ type LiveFeedRow = Database["public"]["Tables"]["live_feed_events"]["Row"];
 type LiveFeedRowWithFixture = LiveFeedRow & {
   fixture: Pick<
     Database["public"]["Tables"]["fixtures"]["Row"],
-    "id" | "matchweek" | "home_team" | "away_team"
+    | "id"
+    | "matchweek"
+    | "home_team"
+    | "away_team"
+    | "home_short_code"
+    | "away_short_code"
   > | null;
 };
 type UserSubmissionRef = Pick<

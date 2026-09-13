@@ -257,10 +257,12 @@ export interface FixtureExternalRefs {
 // Database mapping types
 export interface FixtureInsert extends FixtureExternalRefs {
   away_score?: number | null;
+  away_short_code?: string | null;
   away_team: string;
   current_minute?: number | null;
   has_red_card?: boolean | null;
   home_score?: number | null;
+  home_short_code?: string | null;
   home_team: string;
   live_away_score?: number | null;
   live_home_score?: number | null;
