@@ -25,8 +25,8 @@ function createService(fixtures: OverviewFixtureRow[]) {
       Pick<Repositories["friendsGroupUsers"], "listMembers">
     >(["listMembers"]),
     liveFeedEvents: createRepositoryMock<
-      Pick<Repositories["liveFeedEvents"], "listByGroupMatchweek">
-    >(["listByGroupMatchweek"]),
+      Pick<Repositories["liveFeedEvents"], "listByGroupMatchweekWithFixture">
+    >(["listByGroupMatchweekWithFixture"]),
     predictions: createRepositoryMock<
       Pick<Repositories["predictions"], "listByGroupFixtures">
     >(["listByGroupFixtures"]),
@@ -82,7 +82,7 @@ function createService(fixtures: OverviewFixtureRow[]) {
   ]);
   repositories.weeklyScores.listByGroupWeek.mockResolvedValue([]);
   repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([]);
-  repositories.liveFeedEvents.listByGroupMatchweek.mockResolvedValue([
+  repositories.liveFeedEvents.listByGroupMatchweekWithFixture.mockResolvedValue([
     liveFeedRow("feed-1", "Matchweek 2", "Goal for Arsenal"),
   ]);
   repositories.profiles.listPreviewsByIds.mockResolvedValue([
@@ -161,6 +161,10 @@ describe("MatchweekOverviewService", () => {
     expect(overview.members.find((member) => member.userId === "user-b")?.prediction)
       .toMatchObject({ redCardFixtureId: 201 });
     expect(overview.liveFeed).toHaveLength(1);
+    expect(overview.liveFeed[0].fixture).toMatchObject({
+      home_team: "Arsenal",
+      away_team: "Chelsea",
+    });
   });
 
   it("keeps other members' predictions hidden before the first kickoff", async () => {
@@ -410,7 +414,7 @@ describe("MatchweekOverviewService", () => {
 
       expect(repositories.friendsGroupUsers.listMembers).not.toHaveBeenCalled();
       expect(repositories.profiles.listPreviewsByIds).not.toHaveBeenCalled();
-      expect(repositories.liveFeedEvents.listByGroupMatchweek).not.toHaveBeenCalled();
+      expect(repositories.liveFeedEvents.listByGroupMatchweekWithFixture).not.toHaveBeenCalled();
     });
 
     it("recomputes ranks against a fixtureScoreOverride instead of the fixture's persisted live score", async () => {
@@ -549,7 +553,9 @@ function liveFeedRow(
   id: string,
   matchweek: string,
   message: string
-): LiveFeedRow {
+): LiveFeedRow & {
+  fixture: { id: number; matchweek: string; home_team: string; away_team: string };
+} {
   return {
     id,
     friends_group_id: "group-1",
@@ -562,5 +568,6 @@ function liveFeedRow(
     payload: {},
     pushed_at: null,
     created_at: "2026-08-08T12:27:00Z",
+    fixture: { id: 201, matchweek, home_team: "Arsenal", away_team: "Chelsea" },
   };
 }

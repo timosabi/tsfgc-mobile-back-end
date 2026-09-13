@@ -29,7 +29,12 @@ type SubmissionRow = Pick<
   "user_id" | "submitted_at"
 >;
 type WeeklyScoreRow = Database["public"]["Tables"]["weekly_scores"]["Row"];
-type LiveFeedRow = Database["public"]["Tables"]["live_feed_events"]["Row"];
+type LiveFeedRow = Database["public"]["Tables"]["live_feed_events"]["Row"] & {
+  fixture: Pick<
+    Database["public"]["Tables"]["fixtures"]["Row"],
+    "id" | "matchweek" | "home_team" | "away_team"
+  > | null;
+};
 type MatchweekOverviewRepositories = Pick<
   Repositories,
   | "fixtures"
@@ -373,10 +378,14 @@ export default class MatchweekOverviewService {
     friendsGroupId: string,
     matchweek: string
   ): Promise<LiveFeedRow[]> {
-    return this.repositories.liveFeedEvents.listByGroupMatchweek(
+    // WithFixture returns oldest-first (see PredictionSlipService, its other
+    // caller); reversed here to keep this endpoint's existing newest-first
+    // order rather than changing the shared repository method's contract.
+    const rows = (await this.repositories.liveFeedEvents.listByGroupMatchweekWithFixture(
       friendsGroupId,
       matchweek
-    );
+    )) as unknown as LiveFeedRow[];
+    return rows.slice().reverse();
   }
 
   private async getProfiles(userIds: string[]) {
