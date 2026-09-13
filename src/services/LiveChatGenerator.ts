@@ -63,6 +63,12 @@ export type LiveChatContext = {
   isOwnGoal?: boolean;
   impacts: PredictionImpact[];
   reason: string;
+  // Recent messages generated for this same fixture/group (most recent
+  // last) -- passed through to the AI prompt so it can deliberately avoid
+  // repeating the exact phrasing it just used, rather than independently
+  // re-rolling the same "most likely" wording every call (each call is
+  // otherwise stateless, so nothing else pushes it to vary in practice).
+  avoidPhrases?: string[];
 };
 
 export interface LiveChatGenerator {
@@ -319,14 +325,17 @@ export class MockLiveChatGenerator implements LiveChatGenerator {
 
 const IMPACT_SYSTEM_PROMPT = `You write ONE short, standalone update for a friends' football-prediction group chat, reporting how a goal or red card that JUST happened changed the group's standings. Someone else already told the group what happened in the match itself (the goal, the card) -- your job is ONLY the impact on people's predictions, never a restatement of the match event.
 
-Tone: factual, friendly, and SHORT -- a single short sentence or two, no banter, no mockery, no "prophet"/"wobble"/"plot twist" style commentary.
+Tone: mostly factual and friendly, SHORT -- a single short sentence or two. Light, affectionate mockery is welcome when someone's prediction is doing badly or the standings haven't budged, but keep it a seasoning, not the whole dish: don't force a joke into every message, never be mean, and no "prophet"/"wobble"/"plot twist" style commentary.
 
 The "impacts" field is an array of { name, change, rankDisplay, rankMovement }, already filtered to the ONE thing worth reporting:
 - If it contains "exact_gained" entries, that's the entire story -- everyone listed just hit the exact score. Report only that.
 - Otherwise, if it contains "result_gained" entries, everyone listed just got the plain win/draw/loss result right (not the exact score).
 - Otherwise it contains "red_card_correct" entries -- everyone listed just had their red-card pick confirmed correct.
 - "rankDisplay" (exact_gained/red_card_correct only): that person's CURRENT rank in the live matchweek mini-leaderboard, already formatted in words, e.g. "1st" or "tied for 2nd". State it as their current position only, never as a "moved from/to" change. Omit if null/absent. Never output a "#" or "=" symbol.
-- "rankMovement" (result_gained only): one of "up", "down", or "none" -- whether this specific event actually moved that person in the live matchweek table. Never state a specific rank number for a result_gained person. Keep this part short: "up as it stands" / "slipping" / "no meaningful change".
+- "rankMovement" (result_gained only): one of "up", "down", or "none" -- whether this specific event actually moved that person in the live matchweek table. Never state a specific rank number for a result_gained person. Keep this part short:
+  - "up": vary between "up as it stands", "climbing", "looking nice and tidy up there".
+  - "down": vary between "down as it stands", "slipping", "eish, dropping like a sack of spuds".
+  - "none": vary between "no meaningful change", "steady as she goes", "snore-fest, nothing to see here", "still fast asleep down there".
 - When several people share the exact same change (and, for result_gained, the same rankMovement), combine their names into ONE sentence -- e.g. "Molly, Sabi, Alastair and Leo have the result right -- no meaningful change." Only split into separate sentences when the outcome genuinely differs between people.
 - For red_card_correct, mention the fixed +${RED_CARD_BONUS_POINTS}-point bonus each of them just earned.
 
@@ -340,7 +349,8 @@ Examples of the tone to match:
 "Molly has hit their exact score, now 1st for the matchweek."
 "Alex picks up the Red Card bonus -- ${RED_CARD_BONUS_POINTS} points!"
 "Molly, Sabi, Alastair and Leo have the result right -- no meaningful change."
-"Molly and Sabi have the result right, up as it stands."`;
+"Molly and Sabi have the result right, up as it stands."
+"Tim's prediction is having a nightmare -- down as it stands."`;
 
 // The Score Update: the first thing the group sees for a goal or red card,
 // reporting only the match event itself (never predictions/impacts -- that's
@@ -404,10 +414,14 @@ export class ClaudeLiveChatGenerator implements LiveChatGenerator {
     }
 
     try {
+      const system = context.avoidPhrases?.length
+        ? `${this.systemPrompt}\n\nThis same feed has recently used these exact phrasings -- do not reuse any of them again, pick a different option from the varied wording above instead: ${JSON.stringify(context.avoidPhrases)}`
+        : this.systemPrompt;
+
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: 120,
-        system: this.systemPrompt,
+        system,
         messages: [{ role: "user", content: JSON.stringify(context) }],
       });
 

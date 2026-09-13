@@ -121,6 +121,22 @@ export default class LiveFeedService {
   // crash.
   private readonly pendingVerifications = new Map<string, PendingVerification>();
 
+  // Same in-process, no-replicas precedent as pendingVerifications above --
+  // last few AI-generated messages per fixture (Score Updates) and per
+  // group+fixture (Impact messages), so a stateless AI call can be told what
+  // it just said and told to avoid repeating it. Capped per key and cleared
+  // on fulltime so this can't grow unbounded across a season.
+  private readonly recentScoreUpdateMessages = new Map<number, string[]>();
+  private readonly recentImpactMessages = new Map<string, string[]>();
+  private static readonly RECENT_MESSAGES_LIMIT = 3;
+
+  private pushRecent(map: Map<string | number, string[]>, key: string | number, message: string) {
+    const list = map.get(key) ?? [];
+    list.push(message);
+    while (list.length > LiveFeedService.RECENT_MESSAGES_LIMIT) list.shift();
+    map.set(key, list);
+  }
+
   constructor(
     clientOrRepositories: SupabaseClient<Database> | LiveFeedRepositories,
     private impactGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
@@ -195,11 +211,24 @@ export default class LiveFeedService {
     // "extend their lead" etc. phrasing); the ambient markers (kickoff,
     // halftime, etc.) stay purely deterministic -- there's no lead/trail
     // framing to vary for those.
+    if (input.eventType === "fulltime") {
+      this.recentScoreUpdateMessages.delete(fixture.id);
+      for (const key of Array.from(this.recentImpactMessages.keys())) {
+        if (key.endsWith(`:${fixture.id}`)) this.recentImpactMessages.delete(key);
+      }
+    }
+
     const factualContext = this.buildEventFactualContext(input, fixture);
     const isVerifiable = VERIFIABLE_EVENT_TYPES.has(input.eventType);
+    if (isVerifiable) {
+      factualContext.avoidPhrases = this.recentScoreUpdateMessages.get(fixture.id) ?? [];
+    }
     const factualMessage = isVerifiable
       ? await this.scoreUpdateGenerator.generate(factualContext)
       : buildFactualMessage(factualContext);
+    if (isVerifiable) {
+      this.pushRecent(this.recentScoreUpdateMessages, fixture.id, factualMessage);
+    }
 
     const rows = await Promise.all(
       groups.map((group) =>
@@ -295,8 +324,14 @@ export default class LiveFeedService {
         // Nothing meaningful changed -- no row at all, not even an empty one.
         if (!filteredImpacts.length) return;
 
-        const impactContext = { ...context, impacts: filteredImpacts };
+        const recentKey = `${group.id}:${pending.fixtureId}`;
+        const impactContext = {
+          ...context,
+          impacts: filteredImpacts,
+          avoidPhrases: this.recentImpactMessages.get(recentKey) ?? [],
+        };
         const aiMessage = await this.impactGenerator.generate(impactContext);
+        this.pushRecent(this.recentImpactMessages, recentKey, aiMessage);
 
         await this.repositories.liveFeedEvents.upsertFeedEvent({
           friends_group_id: group.id,
