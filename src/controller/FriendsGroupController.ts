@@ -5,6 +5,7 @@ import FriendsGroupSubscriptionService from "../services/FriendsGroupSubscriptio
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../integrations/supabase/types.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
+import { lookupRateLimiter } from "../middleware/rateLimit.js";
 import { createSportMonksServices } from "../integrations/sportmonks/index.js";
 import FriendsGroupUsersService from "../services/FriendsGroupUsersService.js";
 
@@ -13,7 +14,11 @@ export default class FriendsGroupController {
 
   constructor() {
     this.router.get("/competitions", asyncHandler(this.listCompetitions));
-    this.router.get("/check-slug/:slug", asyncHandler(this.checkSlugExists));
+    this.router.get(
+      "/check-slug/:slug",
+      lookupRateLimiter,
+      asyncHandler(this.checkSlugExists)
+    );
     this.router.get("/admin/all", asyncHandler(this.listAllGroupsForAdmin));
     this.router.post("/", asyncHandler(this.createFriendsGroup));
   }

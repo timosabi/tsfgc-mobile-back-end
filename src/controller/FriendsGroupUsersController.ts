@@ -5,13 +5,18 @@ import AuthService from "../services/AuthService.js";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "../integrations/supabase/types.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
+import { lookupRateLimiter } from "../middleware/rateLimit.js";
 import FriendsGroupJoinRequestService from "../services/FriendsGroupJoinRequestService.js";
 
 export default class FriendsGroupUsersController {
   public router = Router();
 
   constructor() {
-    this.router.get("/invite/:inviteToken", asyncHandler(this.getInvite));
+    this.router.get(
+      "/invite/:inviteToken",
+      lookupRateLimiter,
+      asyncHandler(this.getInvite)
+    );
     this.router.post("/invite/:inviteToken/join", asyncHandler(this.joinByInvite));
     this.router.delete(
       "/:friendsGroupId/leave",

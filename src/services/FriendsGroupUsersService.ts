@@ -297,11 +297,11 @@ export default class FriendsGroupUsersService {
     currentOwnerUserId: string;
     newOwnerUserId: string;
   }): Promise<TransferOwnershipResult> {
+    await this.requireOwner(params.friendsGroupId, params.currentOwnerUserId);
+
     if (params.currentOwnerUserId === params.newOwnerUserId) {
       throw new AppError("New owner must be different from current owner", 400);
     }
-
-    await this.requireOwner(params.friendsGroupId, params.currentOwnerUserId);
 
     const targetMembership =
       await this.repositories.friendsGroupUsers.findMembership(

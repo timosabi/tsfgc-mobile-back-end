@@ -3,14 +3,15 @@ import type { User } from "@supabase/supabase-js";
 import AuthService from "../services/AuthService.js";
 import AccountDeletionService from "../services/AccountDeletionService.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
+import { authRateLimiter } from "../middleware/rateLimit.js";
 
 export default class AuthController {
   public router = Router();
 
   constructor() {
     this.router.get("/me", this.me);
-    this.router.post("/sign-in", this.signIn);
-    this.router.post("/sign-up", this.signUp);
+    this.router.post("/sign-in", authRateLimiter, this.signIn);
+    this.router.post("/sign-up", authRateLimiter, this.signUp);
     this.router.post("/sign-out", this.signOut);
     this.router.get("/callback", this.callback);
     this.router.post("/verify-password", this.verifyPassword);
@@ -84,6 +85,9 @@ export default class AuthController {
 
     if (!email || !password)
       throw new AppError("Email and password required", 400);
+    if (password.length < 8) {
+      throw new AppError("Password must be at least 8 characters", 400);
+    }
 
     const auth = AuthService.forRequest(req, res);
 
@@ -94,7 +98,7 @@ export default class AuthController {
       redirectTo
     );
 
-    if (error) throw new AppError(error.message, 500);
+    if (error) throw new AppError(error.message, error.status ?? 400);
 
     const profile = data.user
       ? await auth.upsertProfileForUser({
@@ -175,8 +179,8 @@ export default class AuthController {
 
     const { currentPassword, newPassword } = req.body ?? {};
     if (!newPassword) throw new AppError("New password is required", 400);
-    if (newPassword.length < 6) {
-      throw new AppError("New password must be at least 6 characters", 400);
+    if (newPassword.length < 8) {
+      throw new AppError("New password must be at least 8 characters", 400);
     }
 
     await this.assertCurrentPassword(auth, user, currentPassword);

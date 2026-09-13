@@ -57,6 +57,18 @@ export default class ProfileController {
       default_friends_group_id,
     } = req.body ?? {};
 
+    if (display_name !== undefined) {
+      if (typeof display_name !== "string" || display_name.trim().length === 0) {
+        throw new AppError("Display name must be a non-empty string", 400);
+      }
+      if (display_name.length > 24) {
+        throw new AppError("Display name must be 24 characters or fewer", 400);
+      }
+      if (/[<>]/.test(display_name)) {
+        throw new AppError("Display name contains invalid characters", 400);
+      }
+    }
+
     await profile.updateProfileData({
       userId: targetUserId,
       data: {

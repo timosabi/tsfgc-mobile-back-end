@@ -503,6 +503,25 @@ describe("FriendsGroupUsersService", () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
+  it("checks ownership before the self-transfer guard", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.findMembership.mockResolvedValueOnce({
+      id: "member-membership",
+      friends_group_id: "group-1",
+      user_id: "member-a",
+      role: "member",
+      joined_at: "2026-05-14T00:00:00.000Z",
+    });
+
+    await expect(
+      service.transferOwnership({
+        friendsGroupId: "group-1",
+        currentOwnerUserId: "member-a",
+        newOwnerUserId: "member-a",
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   it("lets the owner permanently delete their group", async () => {
     const { repositories, service } = createService();
     repositories.friendsGroupUsers.findMembership.mockResolvedValue({

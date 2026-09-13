@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 export interface ApiError extends Error {
   statusCode?: number;
   isOperational?: boolean;
+  type?: string;
 }
 
 export class AppError extends Error implements ApiError {
@@ -41,6 +42,11 @@ export const errorHandler = (
   if (err.name === "JsonWebTokenError") {
     statusCode = 401;
     message = "Invalid token";
+  }
+
+  if (err.type === "entity.parse.failed") {
+    statusCode = 400;
+    message = "Invalid request body";
   }
 
   const response = {
