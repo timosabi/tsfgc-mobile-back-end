@@ -6,12 +6,16 @@ import { createRepositoryMock } from "../helpers/mockRepositories.js";
 
 function createService(
   matchweekOverview?: { getMatchweekScores: jest.Mock },
-  scoreUpdateGenerator?: LiveChatGenerator
+  scoreUpdateGenerator?: LiveChatGenerator,
+  permutations?: { checkAndNotify: jest.Mock }
 ) {
   const repositories = {
     fixtures: createRepositoryMock<
-      Pick<Repositories["fixtures"], "findLiveFeedFixture" | "updateFixtureById">
-    >(["findLiveFeedFixture", "updateFixtureById"]),
+      Pick<
+        Repositories["fixtures"],
+        "findLiveFeedFixture" | "updateFixtureById" | "listForSubscription"
+      >
+    >(["findLiveFeedFixture", "updateFixtureById", "listForSubscription"]),
     friendsGroups: createRepositoryMock<
       Pick<Repositories["friendsGroups"], "listApprovedNamesByIds">
     >(["listApprovedNamesByIds"]),
@@ -95,7 +99,8 @@ function createService(
       repositories as unknown as ConstructorParameters<typeof LiveFeedService>[0],
       impactGenerator,
       matchweekOverview as never,
-      scoreUpdateGenerator
+      scoreUpdateGenerator,
+      permutations as never
     ),
   };
 }
@@ -250,6 +255,66 @@ describe("LiveFeedService", () => {
         })
       );
       expect(service.getDuePendingVerifications(1101, Date.now() + 999_999)).toEqual([]);
+    });
+
+    it("checks matchweek permutations on kickoff, fetching every fixture in that matchweek/league/season", async () => {
+      const permutations = { checkAndNotify: jest.fn().mockResolvedValue(undefined) };
+      const { repositories, service } = createService(undefined, undefined, permutations);
+      repositories.fixtures.listForSubscription.mockResolvedValue([liveFixture()] as never);
+
+      await service.processEvent({
+        eventType: "kickoff",
+        smFixtureId: 1101,
+        smEventId: 1101900,
+        minute: 0,
+      });
+
+      expect(repositories.fixtures.listForSubscription).toHaveBeenCalledWith({
+        providerLeagueId: 8,
+        providerSeasonId: 23614,
+        matchweek: "Matchweek 2",
+      });
+      expect(permutations.checkAndNotify).toHaveBeenCalledWith({
+        fixtureId: 101,
+        allMatchweekFixtures: [liveFixture()],
+        groups: [{ id: "group-1", name: "Los Muchachos" }],
+      });
+    });
+
+    it("never checks matchweek permutations for non-kickoff events", async () => {
+      const permutations = { checkAndNotify: jest.fn().mockResolvedValue(undefined) };
+      const { service } = createService(undefined, undefined, permutations);
+
+      await service.processEvent({
+        eventType: "goal",
+        fixtureId: 101,
+        smFixtureId: 1101,
+        smEventId: 27,
+        minute: 27,
+        homeScore: 1,
+        awayScore: 0,
+      });
+
+      expect(permutations.checkAndNotify).not.toHaveBeenCalled();
+    });
+
+    it("still writes the kickoff marker even if the permutations check throws", async () => {
+      const permutations = {
+        checkAndNotify: jest.fn().mockRejectedValue(new Error("boom")),
+      };
+      const { repositories, service } = createService(undefined, undefined, permutations);
+      repositories.fixtures.listForSubscription.mockResolvedValue([liveFixture()] as never);
+
+      await service.processEvent({
+        eventType: "kickoff",
+        smFixtureId: 1101,
+        smEventId: 1101900,
+        minute: 0,
+      });
+
+      expect(repositories.liveFeedEvents.upsertFeedEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ event_key: "1101:kickoff:1101900" })
+      );
     });
 
     it("skips already-processed events before generating or fanning out to groups", async () => {

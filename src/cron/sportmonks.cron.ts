@@ -13,6 +13,8 @@ import LiveEventsPollerService from "../services/LiveEventsPollerService.js";
 import PushNotificationService from "../services/PushNotificationService.js";
 import DeadlineReminderService from "../services/DeadlineReminderService.js";
 import MatchweekOverviewService from "../services/MatchweekOverviewService.js";
+import MatchweekPermutationService from "../services/MatchweekPermutationService.js";
+import { ClaudePermutationGenerator } from "../services/PermutationChatGenerator.js";
 
 const { hydration, live, sportMonks } = createSportMonksServices(supabaseService);
 const weeklyScore = new WeeklyScoreService(supabaseService);
@@ -20,6 +22,10 @@ const pushNotifications = new PushNotificationService(
   createRepositories(supabaseService)
 );
 const matchweekOverview = new MatchweekOverviewService(supabaseService);
+const matchweekPermutations = new MatchweekPermutationService(
+  supabaseService,
+  new ClaudePermutationGenerator()
+);
 const liveFeed = new LiveFeedService(
   supabaseService,
   new ClaudeLiveChatGenerator(),
@@ -27,7 +33,8 @@ const liveFeed = new LiveFeedService(
   new ClaudeLiveChatGenerator({
     systemPrompt: SCORE_UPDATE_SYSTEM_PROMPT,
     fallback: new DeterministicMessageGenerator(),
-  })
+  }),
+  matchweekPermutations
 );
 const deadlineReminder = new DeadlineReminderService(
   supabaseService,

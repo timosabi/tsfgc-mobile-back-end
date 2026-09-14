@@ -12,6 +12,7 @@ import {
 } from "./LiveChatGenerator.js";
 import { createRepositories, type Repositories } from "../repositories/index.js";
 import type MatchweekOverviewService from "./MatchweekOverviewService.js";
+import type MatchweekPermutationService from "./MatchweekPermutationService.js";
 import type { LiveFeedFixtureRow } from "../repositories/FixturesRepository.js";
 import { shortTeamName } from "./teamDisplayNames.js";
 
@@ -147,7 +148,8 @@ export default class LiveFeedService {
     clientOrRepositories: SupabaseClient<Database> | LiveFeedRepositories,
     private impactGenerator: LiveChatGenerator = new MockLiveChatGenerator(),
     private matchweekOverview?: Pick<MatchweekOverviewService, "getMatchweekScores">,
-    private scoreUpdateGenerator: LiveChatGenerator = new DeterministicMessageGenerator()
+    private scoreUpdateGenerator: LiveChatGenerator = new DeterministicMessageGenerator(),
+    private permutations?: Pick<MatchweekPermutationService, "checkAndNotify">
   ) {
     this.repositories = isLiveFeedRepositories(clientOrRepositories)
       ? clientOrRepositories
@@ -209,6 +211,23 @@ export default class LiveFeedService {
 
     const groups = await this.getSubscribedGroups(fixture);
     const eventKey = this.eventKey(input);
+
+    if (input.eventType === "kickoff" && this.permutations && groups.length && fixture.matchweek) {
+      try {
+        const allMatchweekFixtures = await this.repositories.fixtures.listForSubscription({
+          providerLeagueId: fixture.sm_league_id,
+          providerSeasonId: fixture.sm_season_id,
+          matchweek: fixture.matchweek,
+        });
+        await this.permutations.checkAndNotify({
+          fixtureId: fixture.id,
+          allMatchweekFixtures,
+          groups,
+        });
+      } catch (error) {
+        console.warn("[LiveFeed] Permutations check failed, skipping", error);
+      }
+    }
 
     // The factual "what happened" message never depends on any particular
     // group's predictions, so it's computed once and reused for every group
