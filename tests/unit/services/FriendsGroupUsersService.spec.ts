@@ -182,6 +182,7 @@ describe("FriendsGroupUsersService", () => {
             weekNumber: 12,
             state: "upcoming",
             displayLabel: "Matchweek 12",
+            startsAt: "2026-05-17T12:00:00.000Z",
           },
         }),
       }),
@@ -197,6 +198,73 @@ describe("FriendsGroupUsersService", () => {
     expect(repositories.weeklyScores.listByGroupPaginated).toHaveBeenCalledWith({
       friendsGroupId: "group-1",
     });
+  });
+
+  it("marks the current matchweek as live once any of its fixtures have finished, even with no fixture live right now", async () => {
+    const { repositories, service } = createService();
+    repositories.friendsGroupUsers.listForUser.mockResolvedValue([
+      {
+        role: "owner",
+        joined_at: "2026-05-14T00:00:00.000Z",
+        friends_group: {
+          id: "group-1",
+          name: "Los Muchachos",
+          slug: "los-muchachos",
+          created_by: "owner-a",
+          invite_token: "invite-1",
+          is_open: true,
+          status: "approved",
+          created_at: "2026-05-14T00:00:00.000Z",
+          updated_at: "2026-05-14T00:00:00.000Z",
+        },
+      },
+    ]);
+    repositories.friendsGroupSubscriptions.listActiveWithCatalogByFriendsGroupIds
+      .mockResolvedValue([
+        {
+          friends_group_id: "group-1",
+          provider_league_id: 501,
+          provider_season_id: 25598,
+          competition: {
+            id: "competition-1",
+            name: "Premier League",
+            country_name: "England",
+            logo_url: "https://cdn.example/501.png",
+            provider_league_id: 501,
+          },
+          season: {
+            id: "season-1",
+            name: "2026/2027",
+            provider_season_id: 25598,
+          },
+        },
+      ]);
+    repositories.fixtures.listOverviewFixturesForSubscription.mockResolvedValue([
+      overviewFixture("Matchweek 3", "finished", "2026-09-05T14:00:00.000Z"),
+      {
+        ...overviewFixture("Matchweek 4", "finished", "2026-09-12T14:00:00.000Z"),
+        id: 4001,
+      },
+      {
+        ...overviewFixture("Matchweek 4", "scheduled", "2026-09-14T19:00:00.000Z"),
+        id: 4002,
+      },
+    ]);
+    repositories.weeklyScores.listByGroupPaginated.mockResolvedValue([]);
+
+    await expect(service.getFriendsGroupsForUser("owner-a")).resolves.toEqual([
+      expect.objectContaining({
+        friends_group: expect.objectContaining({
+          currentMatchweek: {
+            matchweek: "Matchweek 4",
+            weekNumber: 4,
+            state: "live",
+            displayLabel: "Matchweek 4",
+            startsAt: "2026-09-14T19:00:00.000Z",
+          },
+        }),
+      }),
+    ]);
   });
 
   it("lists members for owner management with profile previews and action flags", async () => {

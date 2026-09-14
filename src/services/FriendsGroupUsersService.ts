@@ -405,43 +405,57 @@ export default class FriendsGroupUsersService {
   ): GroupCardMatchweek | null {
     if (!fixtures.length) return null;
 
-    const liveFixture = this.sortFixtures(fixtures).find(
-      (fixture) => fixture.status === "live"
+    const byMatchweek = new Map<string, OverviewFixtureRow[]>();
+    for (const fixture of fixtures) {
+      if (!fixture.matchweek) continue;
+      const bucket = byMatchweek.get(fixture.matchweek) ?? [];
+      bucket.push(fixture);
+      byMatchweek.set(fixture.matchweek, bucket);
+    }
+
+    const matchweeks = [...byMatchweek.entries()]
+      .map(([matchweek, rows]) => ({
+        matchweek,
+        rows,
+        earliestTime: Math.min(...rows.map((row) => this.fixtureTime(row))),
+      }))
+      .sort((a, b) => a.earliestTime - b.earliestTime);
+
+    // The current matchweek is the earliest one with at least one fixture
+    // still to be played -- whether that's because none of its fixtures
+    // have kicked off yet (upcoming) or because it's partway through
+    // (some finished/live, some not -- shown as "in progress").
+    const current = matchweeks.find(({ rows }) =>
+      rows.some((fixture) => fixture.status !== "finished")
     );
-    if (liveFixture?.matchweek) {
+
+    if (current) {
+      const hasStarted = current.rows.some(
+        (fixture) => fixture.status === "live" || fixture.status === "finished"
+      );
+      const nextFixture = this.sortFixtures(current.rows).find(
+        (fixture) => fixture.status !== "finished"
+      );
       return {
-        matchweek: liveFixture.matchweek,
-        weekNumber: this.weekNumberFromMatchweek(liveFixture.matchweek),
-        state: "live",
-        displayLabel: liveFixture.matchweek,
-        startsAt: this.fixtureStartsAtIso(liveFixture),
+        matchweek: current.matchweek,
+        weekNumber: this.weekNumberFromMatchweek(current.matchweek),
+        state: hasStarted ? "live" : "upcoming",
+        displayLabel: current.matchweek,
+        startsAt: nextFixture ? this.fixtureStartsAtIso(nextFixture) : null,
       };
     }
 
-    const nextFixture = this.sortFixtures(fixtures).find(
-      (fixture) => fixture.status !== "finished"
-    );
-    if (nextFixture?.matchweek) {
-      return {
-        matchweek: nextFixture.matchweek,
-        weekNumber: this.weekNumberFromMatchweek(nextFixture.matchweek),
-        state: "upcoming",
-        displayLabel: nextFixture.matchweek,
-        startsAt: this.fixtureStartsAtIso(nextFixture),
-      };
-    }
-
-    const finishedFixture = this.sortFixtures(fixtures, false).find(
-      (fixture) => fixture.status === "finished"
-    );
-    if (!finishedFixture?.matchweek) return null;
+    const mostRecentlyFinished = matchweeks[matchweeks.length - 1];
+    if (!mostRecentlyFinished) return null;
 
     return {
-      matchweek: finishedFixture.matchweek,
-      weekNumber: this.weekNumberFromMatchweek(finishedFixture.matchweek),
+      matchweek: mostRecentlyFinished.matchweek,
+      weekNumber: this.weekNumberFromMatchweek(mostRecentlyFinished.matchweek),
       state: "finished",
-      displayLabel: finishedFixture.matchweek,
-      startsAt: this.fixtureStartsAtIso(finishedFixture),
+      displayLabel: mostRecentlyFinished.matchweek,
+      startsAt: this.fixtureStartsAtIso(
+        this.sortFixtures(mostRecentlyFinished.rows, false)[0]
+      ),
     };
   }
 
