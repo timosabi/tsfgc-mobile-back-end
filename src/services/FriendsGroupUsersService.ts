@@ -49,6 +49,7 @@ type GroupCardMatchweek = {
   weekNumber: number | null;
   state: "upcoming" | "live" | "finished";
   displayLabel: string;
+  startsAt: string | null;
 };
 type GroupSeasonScoreSummary = {
   user_id: string;
@@ -395,6 +396,7 @@ export default class FriendsGroupUsersService {
       state: selected.state,
       displayLabel:
         weekNumber === null ? selected.matchweek : `Matchweek ${weekNumber}`,
+      startsAt: selected.startsAt,
     };
   }
 
@@ -412,6 +414,7 @@ export default class FriendsGroupUsersService {
         weekNumber: this.weekNumberFromMatchweek(liveFixture.matchweek),
         state: "live",
         displayLabel: liveFixture.matchweek,
+        startsAt: this.fixtureStartsAtIso(liveFixture),
       };
     }
 
@@ -424,6 +427,7 @@ export default class FriendsGroupUsersService {
         weekNumber: this.weekNumberFromMatchweek(nextFixture.matchweek),
         state: "upcoming",
         displayLabel: nextFixture.matchweek,
+        startsAt: this.fixtureStartsAtIso(nextFixture),
       };
     }
 
@@ -437,6 +441,7 @@ export default class FriendsGroupUsersService {
       weekNumber: this.weekNumberFromMatchweek(finishedFixture.matchweek),
       state: "finished",
       displayLabel: finishedFixture.matchweek,
+      startsAt: this.fixtureStartsAtIso(finishedFixture),
     };
   }
 
@@ -445,6 +450,14 @@ export default class FriendsGroupUsersService {
       const diff = this.fixtureTime(a) - this.fixtureTime(b);
       return ascending ? diff : -diff;
     });
+  }
+
+  private fixtureStartsAtIso(fixture: OverviewFixtureRow) {
+    const raw =
+      fixture.starting_at ??
+      `${fixture.match_date ?? "1970-01-01"}T${fixture.match_time ?? "00:00:00"}`;
+    const time = new Date(raw).getTime();
+    return Number.isFinite(time) ? new Date(time).toISOString() : null;
   }
 
   private fixtureTime(fixture: OverviewFixtureRow) {
