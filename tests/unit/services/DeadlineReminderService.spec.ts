@@ -23,8 +23,22 @@ function createService() {
     friendsGroups: createRepositoryMock<Pick<Repositories["friendsGroups"], "findById">>([
       "findById",
     ]),
+    deadlineReminderLog: createRepositoryMock<
+      Pick<Repositories["deadlineReminderLog"], "tryClaim">
+    >(["tryClaim"]),
   };
   const pushNotifications = { sendToUsers: jest.fn().mockResolvedValue({ sent: 1, skipped: false }) };
+
+  // Faithful stand-in for the persisted claim table: true the first time a
+  // key is claimed, false on every later attempt at the same key -- mirrors
+  // the real repository's dedup semantics across repeated checkAndRemind()
+  // calls within a test.
+  const claimedKeys = new Set<string>();
+  repositories.deadlineReminderLog.tryClaim.mockImplementation(async (key: string) => {
+    if (claimedKeys.has(key)) return false;
+    claimedKeys.add(key);
+    return true;
+  });
 
   repositories.friendsGroupSubscriptions.listActiveTargets.mockResolvedValue([
     { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 },

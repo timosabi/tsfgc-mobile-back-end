@@ -11,6 +11,7 @@ type DeadlineReminderRepositories = Pick<
   | "userSubmissions"
   | "friendsGroups"
   | "notificationSubscriptions"
+  | "deadlineReminderLog"
 >;
 
 // Hours-before-lock at which a reminder fires. Checked as "crossed below this
@@ -21,11 +22,6 @@ const REMINDER_THRESHOLDS_HOURS = [24, 2];
 export default class DeadlineReminderService {
   private readonly repositories: DeadlineReminderRepositories;
   private readonly pushNotifications: PushNotificationService;
-
-  // In-process dedup, same pattern as LiveEventsPollerService's firedSynthetic --
-  // fine because this backend runs as a single instance (confirmed, no replicas).
-  // Worst case on a restart: one reminder re-sent, never a silently dropped one.
-  private readonly remindedKeys = new Set<string>();
 
   constructor(
     clientOrRepositories: SupabaseClient<Database> | DeadlineReminderRepositories,
@@ -83,8 +79,7 @@ export default class DeadlineReminderService {
           if (hoursRemaining > thresholdHours) continue;
 
           const key = `${target.friends_group_id}:${currentMatchweek}:${thresholdHours}`;
-          if (this.remindedKeys.has(key)) continue;
-          this.remindedKeys.add(key);
+          if (!(await this.repositories.deadlineReminderLog.tryClaim(key))) continue;
 
           const sent = await this.remindNonSubmittedMembers(
             target.friends_group_id,
@@ -95,8 +90,7 @@ export default class DeadlineReminderService {
         }
       } else {
         const key = `${target.friends_group_id}:${currentMatchweek}:locked`;
-        if (!this.remindedKeys.has(key)) {
-          this.remindedKeys.add(key);
+        if (await this.repositories.deadlineReminderLog.tryClaim(key)) {
           const sent = await this.notifyLocked(target.friends_group_id, currentMatchweek);
           if (sent) sentCount += 1;
         }
@@ -108,9 +102,6 @@ export default class DeadlineReminderService {
     // finishing, unlocks the next one (which would otherwise become
     // currentMatchweek and hide the one that just needed this check).
     for (const matchweek of openMatchweeks.slice(-2)) {
-      const key = `${target.friends_group_id}:${matchweek}:finished`;
-      if (this.remindedKeys.has(key)) continue;
-
       const weekFixtures =
         matchweek === currentMatchweek
           ? currentFixtures
@@ -122,7 +113,9 @@ export default class DeadlineReminderService {
       if (!weekFixtures.length) continue;
       if (!weekFixtures.every((fixture) => fixture.status === "finished")) continue;
 
-      this.remindedKeys.add(key);
+      const key = `${target.friends_group_id}:${matchweek}:finished`;
+      if (!(await this.repositories.deadlineReminderLog.tryClaim(key))) continue;
+
       const sent = await this.notifyFinished(target.friends_group_id, matchweek);
       if (sent) sentCount += 1;
     }

@@ -34,6 +34,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      deadline_reminder_log: {
+        Row: {
+          created_at: string
+          id: string
+          reminder_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reminder_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reminder_key?: string
+        }
+        Relationships: []
+      }
       fixtures: {
         Row: {
           away_score: number | null

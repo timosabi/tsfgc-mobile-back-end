@@ -1,4 +1,5 @@
 import type { RepositoryClient } from "./base.js";
+import DeadlineReminderLogRepository from "./DeadlineReminderLogRepository.js";
 import FixturesRepository from "./FixturesRepository.js";
 import FootballCompetitionsRepository from "./FootballCompetitionsRepository.js";
 import FootballSeasonsRepository from "./FootballSeasonsRepository.js";
@@ -19,6 +20,7 @@ export type Repositories = ReturnType<typeof createRepositories>;
 
 export function createRepositories(client: RepositoryClient) {
   return {
+    deadlineReminderLog: new DeadlineReminderLogRepository(client),
     fixtures: new FixturesRepository(client),
     footballCompetitions: new FootballCompetitionsRepository(client),
     footballSeasons: new FootballSeasonsRepository(client),
@@ -38,6 +40,7 @@ export function createRepositories(client: RepositoryClient) {
 }
 
 export * from "./base.js";
+export { default as DeadlineReminderLogRepository } from "./DeadlineReminderLogRepository.js";
 export { default as FixturesRepository } from "./FixturesRepository.js";
 export { default as FootballCompetitionsRepository } from "./FootballCompetitionsRepository.js";
 export { default as FootballSeasonsRepository } from "./FootballSeasonsRepository.js";
