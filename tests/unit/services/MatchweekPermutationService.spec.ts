@@ -218,4 +218,26 @@ describe("MatchweekPermutationService", () => {
     );
     expect(redCardScenario).toBeUndefined();
   });
+
+  it("treats equal points_earned as a genuine tie regardless of differing exact/correct-result breakdowns", () => {
+    // Regression test: leadersOf previously used exact_score_points/
+    // correct_result_points as an additional tie-break for *who wins*,
+    // when the app's real rule (MatchweekOverviewService.rankScores) only
+    // uses those to order the display list -- a tie for the top spot is
+    // decided by points_earned alone. Reproduces a real case: Alastair
+    // (correct-result heavy, no exact/goal bonus) and Leo (some correct-
+    // result + a Goal Bonus) landing on equal totals via different routes.
+    const { service } = createService();
+    const tally = new Map([
+      ["user-alastair", { exact_score_points: 0, correct_result_points: 5, total_goals_bonus: 0, red_card_bonus: 5, points_earned: 10 }],
+      ["user-leo", { exact_score_points: 0, correct_result_points: 3, total_goals_bonus: 2, red_card_bonus: 5, points_earned: 10 }],
+      ["user-molly", { exact_score_points: 0, correct_result_points: 4, total_goals_bonus: 2, red_card_bonus: 0, points_earned: 6 }],
+    ]);
+
+    const leaders = (service as unknown as { leadersOf: (t: typeof tally) => string[] }).leadersOf(
+      tally
+    );
+
+    expect(leaders.sort()).toEqual(["user-alastair", "user-leo"]);
+  });
 });

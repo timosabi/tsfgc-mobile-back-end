@@ -464,32 +464,22 @@ export default class MatchweekPermutationService {
     return winners;
   }
 
+  // Names aren't known inside this helper -- callers pass a map already
+  // keyed by user id, so this returns user ids; notifyGroup maps them to
+  // display names via `names` before use. Ties are decided by
+  // points_earned ALONE, matching MatchweekOverviewService.rankScores's
+  // actual tie semantics -- exact_score_points/correct_result_points are
+  // only a display sort-order tie-break there (see rankScores's
+  // tiedWithPrevious check, which compares points_earned only), never a
+  // reason to call an equal-points pair anything but a genuine tie.
   private leadersOf(rows: Map<string, ScoreTally>): string[] {
-    // Names aren't known inside this helper -- callers pass a map already
-    // keyed by user id, so this returns user ids; notifyGroup maps them to
-    // display names via `names` before use. Kept as a thin wrapper so the
-    // rank tie-break (points_earned, then exact_score_points, then
-    // correct_result_points -- same as MatchweekOverviewService.rankScores)
-    // lives in exactly one place.
-    let best: ScoreTally | null = null;
+    let bestPoints = -Infinity;
     let leaders: string[] = [];
     for (const [userId, row] of rows) {
-      if (
-        !best ||
-        row.points_earned > best.points_earned ||
-        (row.points_earned === best.points_earned &&
-          row.exact_score_points > best.exact_score_points) ||
-        (row.points_earned === best.points_earned &&
-          row.exact_score_points === best.exact_score_points &&
-          row.correct_result_points > best.correct_result_points)
-      ) {
-        best = row;
+      if (row.points_earned > bestPoints) {
+        bestPoints = row.points_earned;
         leaders = [userId];
-      } else if (
-        row.points_earned === best.points_earned &&
-        row.exact_score_points === best.exact_score_points &&
-        row.correct_result_points === best.correct_result_points
-      ) {
+      } else if (row.points_earned === bestPoints) {
         leaders.push(userId);
       }
     }
