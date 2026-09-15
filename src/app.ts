@@ -18,6 +18,11 @@ import NotificationSubscriptionController from "./controller/NotificationSubscri
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
+  // Exactly one reverse proxy (nginx) sits in front of this process in
+  // production, adding X-Forwarded-For -- trust just that one hop so
+  // express-rate-limit can read the real client IP instead of throwing
+  // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every rate-limited request.
+  app.set("trust proxy", 1);
 
   app.use(
     cors({

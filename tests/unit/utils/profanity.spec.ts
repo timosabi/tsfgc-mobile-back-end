@@ -13,4 +13,13 @@ describe("containsProfanity", () => {
   it("catches profanity embedded in a longer string", () => {
     expect(containsProfanity("this is such bullshit honestly")).toBe(true);
   });
+
+  it("catches British slang insults missing from obscenity's default list", () => {
+    expect(containsProfanity("bellend")).toBe(true);
+    expect(containsProfanity("tosser")).toBe(true);
+    expect(containsProfanity("knobhead")).toBe(true);
+    expect(containsProfanity("munter")).toBe(true);
+    expect(containsProfanity("slag")).toBe(true);
+    expect(containsProfanity("minger")).toBe(true);
+  });
 });
