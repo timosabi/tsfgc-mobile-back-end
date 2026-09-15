@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../integrations/supabase/types.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
 import { lookupRateLimiter } from "../middleware/rateLimit.js";
+import { containsProfanity } from "../utils/profanity.js";
 import { createSportMonksServices } from "../integrations/sportmonks/index.js";
 import FriendsGroupUsersService from "../services/FriendsGroupUsersService.js";
 
@@ -231,6 +232,9 @@ export default class FriendsGroupController {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
       throw new AppError("Friends group slug must be lowercase kebab-case", 400);
     }
+    if (containsProfanity(slug.replace(/-/g, " "))) {
+      throw new AppError("Friends group slug contains inappropriate language", 400);
+    }
 
     const available = await friendsGroup.isSlugAvailable(slug);
 
@@ -269,6 +273,9 @@ export default class FriendsGroupController {
     if (!slug) throw new AppError("Friends group slug is required", 400);
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
       throw new AppError("Friends group slug must be lowercase kebab-case", 400);
+    }
+    if (containsProfanity(name) || containsProfanity(slug.replace(/-/g, " "))) {
+      throw new AppError("Friends group name/slug contains inappropriate language", 400);
     }
     if (!(await friendsGroup.isSlugAvailable(slug))) {
       throw new AppError("Friends group slug is already taken", 409);

@@ -5,6 +5,7 @@ import PlayerStatsService from "../services/PlayerStatsService.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../integrations/supabase/types.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
+import { containsProfanity } from "../utils/profanity.js";
 
 export default class ProfileController {
   public router = Router();
@@ -66,6 +67,9 @@ export default class ProfileController {
       }
       if (/[<>]/.test(display_name)) {
         throw new AppError("Display name contains invalid characters", 400);
+      }
+      if (containsProfanity(display_name)) {
+        throw new AppError("Display name contains inappropriate language", 400);
       }
     }
 

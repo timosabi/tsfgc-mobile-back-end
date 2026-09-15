@@ -4,6 +4,7 @@ import AuthService from "../services/AuthService.js";
 import AccountDeletionService from "../services/AccountDeletionService.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
 import { authRateLimiter } from "../middleware/rateLimit.js";
+import { containsProfanity } from "../utils/profanity.js";
 
 export default class AuthController {
   public router = Router();
@@ -87,6 +88,9 @@ export default class AuthController {
       throw new AppError("Email and password required", 400);
     if (password.length < 8) {
       throw new AppError("Password must be at least 8 characters", 400);
+    }
+    if (typeof displayName === "string" && containsProfanity(displayName)) {
+      throw new AppError("Display name contains inappropriate language", 400);
     }
 
     const auth = AuthService.forRequest(req, res);
