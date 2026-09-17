@@ -309,6 +309,7 @@ describe("WeeklyScoreService", () => {
         friends_group_id: "group-1",
         provider_league_id: 8,
         provider_season_id: 23614,
+        created_at: "2020-01-01T00:00:00.000Z",
       },
     ]);
     repositories.fixtures.listFinishedMatchweeks.mockResolvedValue([

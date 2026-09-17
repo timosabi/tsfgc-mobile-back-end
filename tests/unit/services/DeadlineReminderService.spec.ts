@@ -41,7 +41,12 @@ function createService() {
   });
 
   repositories.friendsGroupSubscriptions.listActiveTargets.mockResolvedValue([
-    { friends_group_id: "group-1", provider_league_id: 8, provider_season_id: 23614 },
+    {
+      friends_group_id: "group-1",
+      provider_league_id: 8,
+      provider_season_id: 23614,
+      created_at: "2020-01-01T00:00:00.000Z",
+    },
   ]);
   repositories.friendsGroupUsers.listMembers.mockResolvedValue([
     { user_id: "user-a", joined_at: "2026-01-01", role: "owner" },
@@ -139,6 +144,67 @@ describe("DeadlineReminderService", () => {
           slug: "los-muchachos",
         },
       })
+    );
+  });
+
+  it("does not send a finished notification for a matchweek that already fully kicked off before the group's subscription existed", async () => {
+    const { repositories, pushNotifications, service } = createService();
+    repositories.friendsGroupSubscriptions.listActiveTargets.mockResolvedValue([
+      {
+        friends_group_id: "group-1",
+        provider_league_id: 8,
+        provider_season_id: 23614,
+        // Subscription created after this matchweek's only fixture kicked
+        // off (isoHoursFromNow(-3) below) -- e.g. a brand-new group joining
+        // a league whose matchweek 2 is old news by the time it's created.
+        created_at: isoHoursFromNow(-1),
+      },
+    ]);
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
+    repositories.fixtures.listForSubscription.mockResolvedValue([
+      {
+        starting_at: isoHoursFromNow(-3),
+        match_date: "2026-08-01",
+        match_time: "15:00:00",
+        status: "finished",
+      },
+    ] as never);
+
+    await service.checkAndRemind();
+
+    expect(pushNotifications.sendToUsers).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ title: "Matchweek finished" })
+    );
+  });
+
+  it("still sends a finished notification when the subscription existed before the matchweek kicked off", async () => {
+    const { repositories, pushNotifications, service } = createService();
+    repositories.friendsGroupSubscriptions.listActiveTargets.mockResolvedValue([
+      {
+        friends_group_id: "group-1",
+        provider_league_id: 8,
+        provider_season_id: 23614,
+        // Subscription predates kickoff -- the group was around to watch
+        // this matchweek play out, so the finished notice is still live news.
+        created_at: isoHoursFromNow(-10),
+      },
+    ]);
+    repositories.fixtures.listOpenMatchweeks.mockResolvedValue(["Matchweek 2"]);
+    repositories.fixtures.listForSubscription.mockResolvedValue([
+      {
+        starting_at: isoHoursFromNow(-3),
+        match_date: "2026-08-01",
+        match_time: "15:00:00",
+        status: "finished",
+      },
+    ] as never);
+
+    await service.checkAndRemind();
+
+    expect(pushNotifications.sendToUsers).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ title: "Matchweek finished" })
     );
   });
 

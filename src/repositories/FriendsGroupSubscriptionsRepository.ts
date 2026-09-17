@@ -9,6 +9,8 @@ export type ActiveSubscriptionRef = Pick<
   TableRow<"friends_group_subscriptions">,
   "friends_group_id" | "provider_league_id" | "provider_season_id"
 >;
+export type ActiveSubscriptionTarget = ActiveSubscriptionRef &
+  Pick<TableRow<"friends_group_subscriptions">, "created_at">;
 export type ActiveSubscriptionCardRef = ActiveSubscriptionRef & {
   competition: Pick<
     TableRow<"football_competitions">,
@@ -41,16 +43,16 @@ export default class FriendsGroupSubscriptionsRepository extends BaseRepository<
     return (data ?? null) as ActiveSubscriptionRef | null;
   }
 
-  async listActiveTargets(): Promise<ActiveSubscriptionRef[]> {
+  async listActiveTargets(): Promise<ActiveSubscriptionTarget[]> {
     const { data, error } = await this.table()
-      .select("friends_group_id, provider_league_id, provider_season_id")
+      .select("friends_group_id, provider_league_id, provider_season_id, created_at")
       .eq("status", "active");
 
     this.throwOnError(
       error,
       "friends_group_subscriptions listActiveTargets failed"
     );
-    return (data ?? []) as ActiveSubscriptionRef[];
+    return (data ?? []) as ActiveSubscriptionTarget[];
   }
 
   async listActiveWithCatalogByFriendsGroupIds(

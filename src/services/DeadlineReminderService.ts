@@ -49,6 +49,7 @@ export default class DeadlineReminderService {
     friends_group_id: string;
     provider_league_id: number;
     provider_season_id: number | null;
+    created_at: string;
   }): Promise<number> {
     const openMatchweeks = await this.repositories.fixtures.listOpenMatchweeks({
       providerLeagueId: target.provider_league_id,
@@ -112,6 +113,17 @@ export default class DeadlineReminderService {
             });
       if (!weekFixtures.length) continue;
       if (!weekFixtures.every((fixture) => fixture.status === "finished")) continue;
+
+      // A matchweek that had already kicked off in full before this group's
+      // subscription even existed was already over (or effectively so) by
+      // the time the group joined -- notifying about it now would just be
+      // stale news, e.g. a brand-new group immediately getting told an old
+      // matchweek "just finished". Only matchweeks the subscription was
+      // around to actually watch play out should ever trigger this.
+      const latestKickoff = Math.max(
+        ...weekFixtures.map((fixture) => this.fixtureStartTime(fixture))
+      );
+      if (new Date(target.created_at).getTime() > latestKickoff) continue;
 
       const key = `${target.friends_group_id}:${matchweek}:finished`;
       if (!(await this.repositories.deadlineReminderLog.tryClaim(key))) continue;
