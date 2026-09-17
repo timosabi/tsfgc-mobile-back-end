@@ -32,16 +32,25 @@ export class SportMonksTransformer {
       sportMonksFixture.state_id
     );
 
+    // `events` is only present on requests that asked for the "events"
+    // include (e.g. the live poller, finished-fixture hydration). Season
+    // schedule syncs (getScheduleBySeason) never include it and upsert every
+    // fixture in the season on a daily cron -- if we wrote `has_red_card:
+    // null` here for that case, that daily upsert would permanently wipe out
+    // a red card a live event had already correctly flagged `true`. Omit the
+    // key entirely when we genuinely don't know, so that upsert leaves
+    // whatever value is already stored untouched instead of overwriting it
+    // with "unknown".
     const hasRedCard = sportMonksFixture.events
       ? this.hasRedCardInEvents(sportMonksFixture.events)
-      : null;
+      : undefined;
 
     return {
       away_score: currentAwayScore,
       away_short_code: awayTeam?.short_code || null,
       away_team: awayTeam?.name || "Unknown Away Team",
       current_minute: currentMinute,
-      has_red_card: hasRedCard,
+      ...(hasRedCard !== undefined ? { has_red_card: hasRedCard } : {}),
       home_score: currentHomeScore,
       home_short_code: homeTeam?.short_code || null,
       home_team: homeTeam?.name || "Unknown Home Team",
