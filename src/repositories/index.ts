@@ -1,4 +1,5 @@
 import type { RepositoryClient } from "./base.js";
+import ContentReportsRepository from "./ContentReportsRepository.js";
 import DeadlineReminderLogRepository from "./DeadlineReminderLogRepository.js";
 import FixturesRepository from "./FixturesRepository.js";
 import FootballCompetitionsRepository from "./FootballCompetitionsRepository.js";
@@ -9,6 +10,7 @@ import FriendsGroupUsersRepository from "./FriendsGroupUsersRepository.js";
 import FriendsGroupsRepository from "./FriendsGroupsRepository.js";
 import LiveFeedEventsRepository from "./LiveFeedEventsRepository.js";
 import MatchEventsRepository from "./MatchEventsRepository.js";
+import MemberBlocksRepository from "./MemberBlocksRepository.js";
 import NotificationSubscriptionsRepository from "./NotificationSubscriptionsRepository.js";
 import PredictionsRepository from "./PredictionsRepository.js";
 import ProfilesRepository from "./ProfilesRepository.js";
@@ -20,6 +22,7 @@ export type Repositories = ReturnType<typeof createRepositories>;
 
 export function createRepositories(client: RepositoryClient) {
   return {
+    contentReports: new ContentReportsRepository(client),
     deadlineReminderLog: new DeadlineReminderLogRepository(client),
     fixtures: new FixturesRepository(client),
     footballCompetitions: new FootballCompetitionsRepository(client),
@@ -30,6 +33,7 @@ export function createRepositories(client: RepositoryClient) {
     friendsGroups: new FriendsGroupsRepository(client),
     liveFeedEvents: new LiveFeedEventsRepository(client),
     matchEvents: new MatchEventsRepository(client),
+    memberBlocks: new MemberBlocksRepository(client),
     notificationSubscriptions: new NotificationSubscriptionsRepository(client),
     predictions: new PredictionsRepository(client),
     profiles: new ProfilesRepository(client),
@@ -40,6 +44,7 @@ export function createRepositories(client: RepositoryClient) {
 }
 
 export * from "./base.js";
+export { default as ContentReportsRepository } from "./ContentReportsRepository.js";
 export { default as DeadlineReminderLogRepository } from "./DeadlineReminderLogRepository.js";
 export { default as FixturesRepository } from "./FixturesRepository.js";
 export { default as FootballCompetitionsRepository } from "./FootballCompetitionsRepository.js";
@@ -50,6 +55,7 @@ export { default as FriendsGroupUsersRepository } from "./FriendsGroupUsersRepos
 export { default as FriendsGroupsRepository } from "./FriendsGroupsRepository.js";
 export { default as LiveFeedEventsRepository } from "./LiveFeedEventsRepository.js";
 export { default as MatchEventsRepository } from "./MatchEventsRepository.js";
+export { default as MemberBlocksRepository } from "./MemberBlocksRepository.js";
 export { default as NotificationSubscriptionsRepository } from "./NotificationSubscriptionsRepository.js";
 export { default as PredictionsRepository } from "./PredictionsRepository.js";
 export { default as ProfilesRepository } from "./ProfilesRepository.js";

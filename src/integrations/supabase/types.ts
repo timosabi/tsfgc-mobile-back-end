@@ -34,6 +34,74 @@ export type Database = {
   }
   public: {
     Tables: {
+      content_reports: {
+        Row: {
+          created_at: string
+          friends_group_id: string
+          id: string
+          reported_display_name: string
+          reported_user_id: string
+          reporter_user_id: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          friends_group_id: string
+          id?: string
+          reported_display_name: string
+          reported_user_id: string
+          reporter_user_id: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          friends_group_id?: string
+          id?: string
+          reported_display_name?: string
+          reported_user_id?: string
+          reporter_user_id?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_reports_friends_group_id_fkey"
+            columns: ["friends_group_id"]
+            isOneToOne: false
+            referencedRelation: "friends_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_reports_reported_user_id_fkey"
+            columns: ["reported_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_reports_reporter_user_id_fkey"
+            columns: ["reporter_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_reports_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deadline_reminder_log: {
         Row: {
           created_at: string
@@ -507,6 +575,42 @@ export type Database = {
             columns: ["fixture_id"]
             isOneToOne: false
             referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_blocks: {
+        Row: {
+          blocked_user_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          blocked_user_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          blocked_user_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_blocks_blocked_user_id_fkey"
+            columns: ["blocked_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_blocks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

@@ -178,6 +178,15 @@ export default class ProfilesRepository extends BaseRepository<"profiles"> {
     this.throwOnError(error, "profiles clearFriendsGroupRefs failed");
   }
 
+  async listAdminIds(): Promise<string[]> {
+    const { data, error } = await this.table()
+      .select("id")
+      .eq("is_admin", true);
+
+    this.throwOnError(error, "profiles listAdminIds failed");
+    return (data ?? []).map((row) => (row as Pick<TableRow<"profiles">, "id">).id);
+  }
+
   async listDisplayNamesByIds(
     userIds: string[]
   ): Promise<Array<Pick<TableRow<"profiles">, "id" | "display_name">>> {
